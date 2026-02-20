@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import Card from './Card';
 import { FaFileCsv, FaCheckCircle, FaExclamationCircle, FaChevronDown, FaChevronRight, FaWallet, FaArrowDown, FaArrowUp, FaExchangeAlt, FaStore } from 'react-icons/fa';
-import * as XLSX from 'xlsx';
+import * as XLSX from '@e965/xlsx';
 import Papa from 'papaparse';
 
 const cleanString = (val) => (typeof val === 'string' ? val.replace(/\*/g, '').trim() : val);
@@ -98,6 +98,54 @@ const isSummaryTx = (norm) => {
   return FOOTER_KEYWORDS.some(kw => desc.startsWith(kw) || firstVal.startsWith(kw));
 };
 
+// ── Merchant display-name cleanup ────────────────────
+const MERCHANT_MAP = [
+  [/netflix/i, 'Netflix'],          [/spotify/i, 'Spotify'],
+  [/hotstar|disney/i, 'Disney+ Hotstar'], [/amazon\s*prime|primevideo/i, 'Amazon Prime'],
+  [/youtube\s*premium/i, 'YouTube Premium'], [/zee5/i, 'Zee5'], [/sonyliv/i, 'SonyLIV'],
+  [/render\.com/i, 'Render.com'],   [/github/i, 'GitHub'],    [/notion/i, 'Notion'],
+  [/figma/i, 'Figma'],              [/openai|chatgpt/i, 'OpenAI'], [/slack/i, 'Slack'],
+  [/zoom/i, 'Zoom'],                [/google/i, 'Google'],    [/microsoft|msft/i, 'Microsoft'],
+  [/dropbox/i, 'Dropbox'],          [/apple/i, 'Apple'],      [/jio/i, 'Jio'],
+  [/airtel/i, 'Airtel'],            [/bsnl/i, 'BSNL'],        [/vodafone/i, 'Vodafone'],
+  [/bajaj\s*finance/i, 'Bajaj Finance'], [/hdfc/i, 'HDFC'],  [/icici/i, 'ICICI'],
+  [/swiggy/i, 'Swiggy'],            [/zomato/i, 'Zomato'],    [/amazon/i, 'Amazon'],
+  [/flipkart/i, 'Flipkart'],        [/myntra/i, 'Myntra'],    [/paytm/i, 'Paytm'],
+  [/phonepe/i, 'PhonePe'],          [/razorpay/i, 'Razorpay'],[/ola\b/i, 'Ola'],
+  [/uber/i, 'Uber'],                [/irctc/i, 'IRCTC'],      [/bookmyshow/i, 'BookMyShow'],
+];
+
+const SUBSCRIPTION_PATTERNS = [
+  /netflix/i, /spotify/i, /hotstar/i, /disney/i, /prime\s*video/i, /amazon\s*prime/i,
+  /youtube\s*premium/i, /zee5/i, /sonyliv/i, /render\.com/i, /github/i, /notion/i,
+  /figma/i, /openai/i, /chatgpt/i, /slack/i, /\bzoom\b/i,
+  /google\s*(one|workspace)/i, /microsoft\s*(365|office)/i, /dropbox/i,
+  /net\s*banking\s*si/i, /standing\s*instruct/i, /si\s*[-\u2013]\s*monthly/i,
+  /\bemi\b/i, /loan\s*(emi|inst)/i,
+];
+
+const cleanMerchantName = (raw) => {
+  if (!raw) return 'Unknown';
+  // Known merchant map tested on the full raw string
+  for (const [pattern, name] of MERCHANT_MAP) {
+    if (pattern.test(raw)) return name;
+  }
+  // Strip common bank prefixes + long numeric/masked IDs
+  let clean = raw
+    .replace(/^\d+\s+/i, '')                                  // leading numeric ID
+    .replace(/^(UPI|IMPS|NEFT|RTGS|ACH\s*DR|IB\s*BILLPAY\s*DR)[-\s:]+/i, '')
+    .replace(/^(EAW|ATW|NWD|IWD)[-\s][^-]+-[^-]+-/i, '')     // ATM prefix
+    .replace(/^POS\s+[\dX\s]*/i, '')                          // POS prefix
+    .replace(/^\d+[-\s]+/i, '')                               // remaining leading digits
+    .replace(/[-_][\dX]{6,}/g, '')                            // long masked IDs
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+  return clean.length > 2 ? clean.charAt(0).toUpperCase() + clean.slice(1) : raw.slice(0, 32);
+};
+
+const isLikelySubscription = (desc) =>
+  SUBSCRIPTION_PATTERNS.some(p => p.test(desc));
+
 function parseCSV(text) {
   const result = Papa.parse(text, { header: true, skipEmptyLines: true });
   const rows = result.data.map(row => buildNorm(row));
@@ -125,7 +173,9 @@ function detectRecurring(transactions) {
   return Object.entries(map)
     .filter(([_, arr]) => arr.length > 1)
     .map(([desc, arr]) => ({
-      description: desc,
+      description: cleanMerchantName(desc),
+      rawDescription: desc,
+      isSubscription: isLikelySubscription(desc),
       count: arr.length,
       total: arr.reduce((sum, tx) => sum + (parseAmount(getDebitAmt(tx) ?? getCreditAmt(tx)) || 0), 0),
       lastDate: getTxDate(arr[arr.length - 1]),
@@ -161,11 +211,41 @@ const MiniBar = ({ label, value, max, onClick, isOpen }) => (
   </div>
 );
 
+const HeroState = () => (
+  <div className="hero-state">
+    <div className="hero-headline">Turn your bank statement into savings insights</div>
+    <div className="hero-sub">Instantly see subscriptions, top spending categories and biggest payments — processed privately, right here in your browser.</div>
+    <div className="hero-features">
+      <div className="hero-feature">
+        <div className="hero-feature-icon">💳</div>
+        <div className="hero-feature-title">Detect Subscriptions</div>
+        <div className="hero-feature-desc">Spots Netflix, Spotify, EMIs and hidden recurring charges automatically</div>
+      </div>
+      <div className="hero-feature">
+        <div className="hero-feature-icon">📊</div>
+        <div className="hero-feature-title">Spending Patterns</div>
+        <div className="hero-feature-desc">Top payees, monthly trends and largest payments at a glance</div>
+      </div>
+      <div className="hero-feature">
+        <div className="hero-feature-icon">🔒</div>
+        <div className="hero-feature-title">100% Private</div>
+        <div className="hero-feature-desc">Your bank data never leaves your browser. No accounts, no server uploads</div>
+      </div>
+    </div>
+    <div className="hero-cta-hint">↑ Upload your bank statement above to get started</div>
+  </div>
+);
+
 const Insights = ({ recurring, payments, userStats, hasData }) => {
   const [openIndex, setOpenIndex] = useState(null);
+  const [openSubIndex, setOpenSubIndex] = useState(null);
   const [openPaymentIndex, setOpenPaymentIndex] = useState(null);
   const [openPayeeIndex, setOpenPayeeIndex] = useState(null);
   if (!hasData) return null;
+
+  const subscriptions  = recurring.filter(r => r.isSubscription);
+  const otherRecurring = recurring.filter(r => !r.isSubscription);
+  const subMonthlyEst  = subscriptions.reduce((s, r) => s + (r.total / Math.max(r.count, 1)), 0);
 
   const maxMerchant = userStats.topMerchants?.[0]?.total || 1;
   const maxMonth = Math.max(...(userStats.monthlySpend?.map(m => m.total) || [1]), 1);
@@ -181,20 +261,64 @@ const Insights = ({ recurring, payments, userStats, hasData }) => {
         <StatCard icon={<FaWallet size={16}/>} label="Largest Payment" value={fmt(userStats.largestPayment.amount)} sub={userStats.largestPayment.description?.slice(0, 28) || ''} color="#6a1b9a" />
       </div>
 
-      {/* Recurring Payments */}
+      {/* Subscriptions & EMIs — shown only when detected */}
+      {subscriptions.length > 0 && (
+        <div className="section-block subscription-block">
+          <div className="section-header">
+            <span>💳</span>
+            <span>Subscriptions &amp; EMIs</span>
+            <span className="count-badge">{subscriptions.length}</span>
+            <span className="sub-monthly-est">~{fmt(subMonthlyEst)}/mo avg</span>
+          </div>
+          <table className="table-compact">
+            <thead><tr><th style={{width:'55%'}}>Service</th><th>Occurrences</th><th>Total Paid</th><th>Last Date</th></tr></thead>
+            <tbody>
+              {subscriptions.sort((a,b) => b.total - a.total).map((r, i) => (
+                <React.Fragment key={i}>
+                  <tr onClick={() => setOpenSubIndex(openSubIndex === i ? null : i)} className="clickable-row">
+                    <td>
+                      <span className="expand-icon">{openSubIndex === i ? <FaChevronDown size={10}/> : <FaChevronRight size={10}/>}</span>
+                      <span className="sub-service-name">{r.description}</span>
+                    </td>
+                    <td><span className="occ-badge">{r.count}×</span></td>
+                    <td className="amt-debit">{fmt(r.total)}</td>
+                    <td className="date-cell">{r.lastDate}</td>
+                  </tr>
+                  {openSubIndex === i && (
+                    <tr className="detail-row">
+                      <td colSpan={4}>
+                        <div className="detail-grid">
+                          {r.details.map((d, idx) => (
+                            <div key={idx} className="detail-chip">
+                              <span>{d.date || '—'}</span>
+                              {typeof d.amount === 'number' && <span className="amt-debit">{fmt(d.amount)}</span>}
+                            </div>
+                          ))}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Other Recurring (or all Recurring when no subscriptions found) */}
       <div className="section-block">
         <div className="section-header">
           <FaCheckCircle color="#4e54c8" />
-          <span>Recurring Payments</span>
-          {recurring.length > 0 && <span className="count-badge">{recurring.length}</span>}
+          <span>{subscriptions.length > 0 ? 'Other Recurring' : 'Recurring Payments'}</span>
+          {otherRecurring.length > 0 && <span className="count-badge">{otherRecurring.length}</span>}
         </div>
-        {recurring.length === 0 ? (
-          <p className="badge-muted">No recurring payments found.</p>
+        {otherRecurring.length === 0 ? (
+          <p className="badge-muted">{subscriptions.length > 0 ? 'No other recurring payments.' : 'No recurring payments found.'}</p>
         ) : (
           <table className="table-compact">
             <thead><tr><th style={{width:'55%'}}>Description</th><th>Occurrences</th><th>Total Spent</th><th>Last Date</th></tr></thead>
             <tbody>
-              {recurring.sort((a,b) => b.total - a.total).map((r, i) => (
+              {otherRecurring.sort((a,b) => b.total - a.total).map((r, i) => (
                 <React.Fragment key={i}>
                   <tr onClick={() => setOpenIndex(openIndex === i ? null : i)} className="clickable-row">
                     <td><span className="expand-icon">{openIndex === i ? <FaChevronDown size={10}/> : <FaChevronRight size={10}/>}</span>{r.description}</td>
@@ -236,7 +360,7 @@ const Insights = ({ recurring, payments, userStats, hasData }) => {
                 {payments.map((p, i) => (
                   <React.Fragment key={i}>
                     <tr onClick={() => setOpenPaymentIndex(openPaymentIndex === i ? null : i)} className="clickable-row">
-                      <td><span className="expand-icon">{openPaymentIndex === i ? <FaChevronDown size={10}/> : <FaChevronRight size={10}/>}</span>{p.description.slice(0, 38)}{p.description.length > 38 ? '\u2026' : ''}</td>
+                      <td><span className="expand-icon">{openPaymentIndex === i ? <FaChevronDown size={10}/> : <FaChevronRight size={10}/>}</span>{p.displayName.slice(0, 38)}{p.displayName.length > 38 ? '\u2026' : ''}</td>
                       <td className="amt-debit">{fmt(p.amount)}</td>
                       <td className="date-cell">{p.date}</td>
                     </tr>
@@ -333,6 +457,7 @@ const StatementUploader = () => {
       .sort((a, b) => (parseAmount(getDebitAmt(b.norm)) || 0) - (parseAmount(getDebitAmt(a.norm)) || 0));
     return debits.slice(0, 5).map(({ norm }) => ({
       description: getTxDesc(norm),
+      displayName: cleanMerchantName(getTxDesc(norm)),
       amount: parseAmount(getDebitAmt(norm)) || 0,
       date: getTxDate(norm),
       reference: findColVal(norm, 'ref no./cheque no.', 'chq/ref no.', 'chq / ref no.', 'reference no.', 'transaction id', 'txn id') || '',
@@ -353,7 +478,7 @@ const StatementUploader = () => {
 
     const largestPayment = debits.reduce((max, norm) => {
       const amt = parseAmount(getDebitAmt(norm)) || 0;
-      return amt > max.amount ? { amount: amt, description: getTxDesc(norm) } : max;
+      return amt > max.amount ? { amount: amt, description: cleanMerchantName(getTxDesc(norm)) } : max;
     }, { amount: 0, description: '' });
 
     // Top merchants
@@ -369,7 +494,7 @@ const StatementUploader = () => {
     const topMerchants = Object.entries(merchantMap)
       .sort((a, b) => b[1].total - a[1].total)
       .slice(0, 5)
-      .map(([name, d]) => ({ name, total: d.total, transactions: d.transactions }));
+      .map(([name, d]) => ({ name: cleanMerchantName(name), total: d.total, transactions: d.transactions }));
 
     // Monthly spend — date is already "DD/MM/YYYY" string from getTxDate
     const monthMap = {};
@@ -410,6 +535,27 @@ const StatementUploader = () => {
     setFileName('');
     const file = e.target.files[0];
     if (!file) return;
+
+    // File size limit: 20 MB
+    const MAX_SIZE_MB = 20;
+    if (file.size > MAX_SIZE_MB * 1024 * 1024) {
+      setError(`File is too large. Please upload a file under ${MAX_SIZE_MB} MB.`);
+      return;
+    }
+
+    // MIME type + extension validation
+    const allowedMime = [
+      'text/csv', 'text/plain', 'application/csv',
+      'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    ];
+    const ext = file.name.split('.').pop().toLowerCase();
+    const allowedExt = ['csv', 'xlsx', 'xls'];
+    if (!allowedExt.includes(ext) || (file.type && !allowedMime.includes(file.type) && file.type !== '')) {
+      setError('Invalid file type. Only .csv, .xlsx, and .xls bank statements are accepted.');
+      return;
+    }
+
     setFileName(file.name);
     let data = [];
     try {
@@ -489,7 +635,8 @@ const StatementUploader = () => {
       setUserStats(getUserStats(data));
       setHasData(true);
     } catch (err) {
-      setError('Failed to parse file.');
+      console.error('Statement parse error:', err);
+      setError('Failed to parse file. Please check the file is a valid bank statement.');
     }
   };
 
@@ -498,6 +645,11 @@ const StatementUploader = () => {
       <h2 className="upload-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <FaFileCsv color="#4e54c8" /> Upload Bank Statement <span className="badge-muted">CSV or Excel → detect recurring payments → dashboard + renewal alerts</span>
       </h2>
+
+      {/* Privacy notice */}
+      <div className="privacy-notice">
+        🔒 <strong>Your data never leaves your device.</strong> All processing happens locally in your browser. Nothing is uploaded to any server.
+      </div>
       <label htmlFor="statement-upload" className="upload-box">
         <input id="statement-upload" type="file" accept=".csv,.xlsx,.xls" onChange={handleFile} style={{ display: 'none' }} />
         {fileName ? `Selected: ${fileName}` : 'Click to select a bank statement  (.csv, .xlsx, .xls)'}
@@ -507,6 +659,7 @@ const StatementUploader = () => {
           <FaExclamationCircle color="#d32f2f" /> {error}
         </div>
       )}
+      {!hasData && <HeroState />}
       <Insights recurring={recurring} payments={payments} userStats={userStats} hasData={hasData} />
     </Card>
   );

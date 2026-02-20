@@ -123,6 +123,19 @@ body {
   margin-bottom: 0.7rem;
 }
 
+.privacy-notice {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.82rem;
+  color: #166534;
+  margin-bottom: 0.5rem;
+}
+
 .upload-box {
   display: block;
   margin: 0.9rem auto 0.8rem;
@@ -484,4 +497,94 @@ body {
   .stat-cards-row { grid-template-columns: repeat(2, 1fr); }
   .bottom-grid { grid-template-columns: 1fr; }
   .table-compact th, .table-compact td { font-size: 0.8rem; }
+  .hero-features { grid-template-columns: 1fr; }
+  .hero-headline { font-size: 1.1rem; }
+  .sub-monthly-est { display: none; }
+}
+
+/* ── Hero / empty state ───────────────────────────── */
+.hero-state {
+  padding: 1.8rem 0.5rem 1.2rem;
+  text-align: center;
+}
+
+.hero-headline {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 0.5rem;
+}
+
+.hero-sub {
+  color: var(--muted);
+  font-size: 0.9rem;
+  max-width: 520px;
+  margin: 0 auto 1.6rem;
+  line-height: 1.65;
+}
+
+.hero-features {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.9rem;
+  margin-bottom: 1.5rem;
+}
+
+.hero-feature {
+  background: #f7f8ff;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1rem 0.9rem;
+  text-align: left;
+}
+
+.hero-feature-icon {
+  font-size: 1.5rem;
+  margin-bottom: 0.4rem;
+}
+
+.hero-feature-title {
+  font-weight: 700;
+  font-size: 0.88rem;
+  color: var(--text);
+  margin-bottom: 0.2rem;
+}
+
+.hero-feature-desc {
+  font-size: 0.77rem;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.hero-cta-hint {
+  font-size: 0.82rem;
+  color: var(--brand);
+  font-weight: 600;
+  letter-spacing: 0.2px;
+}
+
+/* ── Subscription block ───────────────────────────── */
+.subscription-block {
+  border-color: #c7d2fe;
+  background: linear-gradient(135deg, #fafbff 0%, #f5f3ff 100%);
+}
+
+.subscription-block .section-header {
+  color: #3730a3;
+}
+
+.sub-monthly-est {
+  margin-left: auto;
+  background: #e0e7ff;
+  color: #3730a3;
+  border-radius: 999px;
+  padding: 1px 9px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.sub-service-name {
+  font-weight: 600;
+  color: var(--text);
 }
