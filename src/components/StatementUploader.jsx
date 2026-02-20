@@ -496,11 +496,11 @@ const StatementUploader = () => {
   return (
     <Card>
       <h2 className="upload-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <FaFileCsv color="#4e54c8" /> Upload bank CSV <span className="badge-muted">→ detect recurring payments → dashboard + renewal alerts</span>
+        <FaFileCsv color="#4e54c8" /> Upload Bank Statement <span className="badge-muted">CSV or Excel → detect recurring payments → dashboard + renewal alerts</span>
       </h2>
-      <label htmlFor="csv-upload" className="upload-box">
-        <input id="csv-upload" type="file" accept=".csv,.xlsx,.xls" onChange={handleFile} style={{ display: 'none' }} />
-        {fileName ? `Selected: ${fileName}` : 'Click to select a CSV or Excel file'}
+      <label htmlFor="statement-upload" className="upload-box">
+        <input id="statement-upload" type="file" accept=".csv,.xlsx,.xls" onChange={handleFile} style={{ display: 'none' }} />
+        {fileName ? `Selected: ${fileName}` : 'Click to select a bank statement  (.csv, .xlsx, .xls)'}
       </label>
       {error && (
         <div className="error" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
