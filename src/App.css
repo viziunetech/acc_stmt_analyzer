@@ -363,6 +363,62 @@ body {
   color: #374151;
 }
 
+/* Payment detail panel */
+.payment-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.payment-detail-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.detail-label {
+  min-width: 150px;
+  font-weight: 600;
+  color: var(--muted);
+  flex-shrink: 0;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+/* Payee transactions detail */
+.payee-detail {
+  margin: 0.2rem 0 0.3rem 0;
+  padding: 0.4rem 0.5rem;
+  background: #f8f9ff;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+/* Clickable mini bar */
+.mini-bar-clickable {
+  cursor: pointer;
+  border-radius: 6px;
+  padding: 2px 4px;
+  margin: -2px -4px;
+  transition: background 0.15s;
+}
+
+.mini-bar-clickable:hover {
+  background: #eef2ff;
+}
+
+.mini-bar-active {
+  background: #eef2ff;
+  border-radius: 6px;
+  padding: 2px 4px;
+  margin: -2px -4px;
+}
+
 /* Bottom two-column grid */
 .bottom-grid {
   display: grid;

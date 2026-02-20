@@ -9,7 +9,8 @@ const normalizeKey = (key) =>
   (typeof key === 'string' ? key.replace(/\*/g, '').trim().toLowerCase().replace(/\s+/g, ' ') : '');
 const buildNorm = (tx) => Object.fromEntries(Object.entries(tx).map(([k, v]) => [normalizeKey(k), cleanString(v)]));
 const parseAmount = (val) => {
-  if (typeof val === 'number') return val;
+  if (typeof val === 'number') return isFinite(val) ? val : null;
+  if (val instanceof Date) return null;
   if (typeof val === 'string') {
     const cleaned = val.replace(/,/g, '').trim();
     if (!cleaned) return null;
@@ -19,38 +20,105 @@ const parseAmount = (val) => {
   return null;
 };
 
+// Find a value in norm by trying exact keys, then partial-name fallback
+const findColVal = (norm, ...keys) => {
+  for (const k of keys) {
+    if (norm[k] !== undefined && norm[k] !== null) return norm[k];
+  }
+  // Partial match — handles variants like "Withdrawal Amt. (INR)"
+  for (const k of keys) {
+    const base = k.replace(/[.()]+$/, '').trim();
+    const found = Object.keys(norm).find(nk => nk.startsWith(base));
+    if (found !== undefined) return norm[found];
+  }
+  return undefined;
+};
+
+const getDebitAmt  = (norm) => findColVal(norm,
+  'withdrawal amt.', 'withdrawal', 'debit amt.', 'debit amount', 'debit', 'dr amt.', 'dr', 'amount', 'amt'
+);
+const getCreditAmt = (norm) => findColVal(norm,
+  'deposit amt.', 'deposit', 'credit amt.', 'credit amount', 'credit', 'cr amt.', 'cr'
+);
+const getDrCr = (norm) =>
+  (norm['dr / cr'] || norm['dr/cr'] || norm['drcr'] || norm['cr/dr'] ||
+   norm['txn type'] || norm['transaction type'] || norm['type'] || '').toString().toUpperCase();
+const getTxDate = (norm) => {
+  const raw = findColVal(norm,
+    'txn date', 'transaction date', 'value date', 'value dt', 'date', 'posting date', 'book date'
+  );
+  if (!raw) return '';
+  // Excel serial date → DD/MM/YYYY string
+  if (typeof raw === 'number' && raw > 1000) {
+    const d = new Date(Math.round((raw - 25569) * 86400 * 1000));
+    const dd = String(d.getUTCDate()).padStart(2, '0');
+    const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+    return `${dd}/${mm}/${d.getUTCFullYear()}`;
+  }
+  if (raw instanceof Date) {
+    const dd = String(raw.getDate()).padStart(2, '0');
+    const mm = String(raw.getMonth() + 1).padStart(2, '0');
+    return `${dd}/${mm}/${raw.getFullYear()}`;
+  }
+  return raw.toString();
+};
+const getTxDesc = (norm) => findColVal(norm,
+  'narration', 'description', 'desc', 'remarks', 'particulars', 'transaction details', 'details'
+) || '';
+
+// Determine if a tx is a debit (withdrawal)
+const isDebit = (norm) => {
+  const drcr = getDrCr(norm);
+  if (drcr) return drcr === 'DR' || drcr === 'DEBIT';
+  // Separate withdrawal/deposit columns
+  const w = findColVal(norm, 'withdrawal amt.', 'withdrawal', 'debit amt.', 'debit amount', 'debit', 'dr amt.', 'dr');
+  return parseAmount(w) > 0;
+};
+const isCredit = (norm) => {
+  const drcr = getDrCr(norm);
+  if (drcr) return drcr === 'CR' || drcr === 'CREDIT';
+  const c = getCreditAmt(norm);
+  return parseAmount(c) > 0;
+};
+
+// Shared footer/summary keywords — used for both CSV and Excel parsing
+const FOOTER_KEYWORDS = [
+  'statement summary', 'opening balance', 'closing balance',
+  'generated on', 'dr count', 'cr count', 'total debit', 'total credit',
+  'account summary', 'note :', 'note:', 'disclaimer',
+];
+
+// Returns true if a normalized row looks like a summary/footer row (not a real transaction)
+const isSummaryTx = (norm) => {
+  const desc   = (getTxDesc(norm) || '').toLowerCase().trim();
+  // Also check the raw first non-empty value in the row (handles CSV where summary text lands in any column)
+  const firstVal = Object.values(norm)
+    .map(v => (v || '').toString().toLowerCase().trim())
+    .find(v => v.length > 0) || '';
+  return FOOTER_KEYWORDS.some(kw => desc.startsWith(kw) || firstVal.startsWith(kw));
+};
+
 function parseCSV(text) {
-  // Use PapaParse for robust CSV parsing
   const result = Papa.parse(text, { header: true, skipEmptyLines: true });
-  return result.data.map(row => buildNorm(row));
+  const rows = result.data.map(row => buildNorm(row));
+  // Truncate at the first summary/footer row so bank statement totals are never counted
+  const endIdx = rows.findIndex(row => isSummaryTx(row));
+  return endIdx === -1 ? rows : rows.slice(0, endIdx);
 }
 
 function detectRecurring(transactions) {
-  // Use normalized keys (lowercase, trimmed)
-  const descKeys = ['description', 'desc', 'narration', 'remarks', 'particulars'];
-  const amtKeys = ['amount', 'amt', 'withdrawal amt.', 'withdrawal', 'debit', 'dr', 'deposit amt.', 'credit', 'cr'];
-  const dateKeys = ['transaction date', 'value date', 'value dt', 'date', 'txn date'];
   const filtered = transactions.filter(tx => {
     const norm = buildNorm(tx);
-    const desc = descKeys.map(k => norm[k]).find(v => (typeof v === 'string' ? v.trim() : v));
-    // For amount, use withdrawal if present, else deposit, else amount
-    const amtCandidate =
-      norm['withdrawal amt.'] ?? norm['withdrawal'] ?? norm['debit'] ?? norm['dr'] ??
-      norm['deposit amt.'] ?? norm['credit'] ?? norm['cr'] ??
-      norm['amount'] ?? norm['amt'];
-    const amt = parseAmount(amtCandidate);
-    return desc && amt !== null;
+    const desc = getTxDesc(norm);
+    const amt = parseAmount(getDebitAmt(norm) ?? getCreditAmt(norm));
+    return desc && amt !== null && amt > 0;
   });
   const map = {};
   filtered.forEach(tx => {
     const norm = buildNorm(tx);
-    const desc = descKeys.map(k => norm[k]).find(v => (typeof v === 'string' ? v.trim() : v)) || 'Unknown';
-    const date = dateKeys.map(k => norm[k]).find(v => (typeof v === 'string' ? v.trim() : v)) || '';
-    const amtCandidate =
-      norm['withdrawal amt.'] ?? norm['withdrawal'] ?? norm['debit'] ?? norm['dr'] ??
-      norm['deposit amt.'] ?? norm['credit'] ?? norm['cr'] ??
-      norm['amount'] ?? norm['amt'];
-    const amount = parseAmount(amtCandidate);
+    const desc = getTxDesc(norm) || 'Unknown';
+    const date = getTxDate(norm);
+    const amount = parseAmount(getDebitAmt(norm) ?? getCreditAmt(norm));
     map[desc] = map[desc] || [];
     map[desc].push({ ...norm, _date: date, _amount: amount });
   });
@@ -59,22 +127,10 @@ function detectRecurring(transactions) {
     .map(([desc, arr]) => ({
       description: desc,
       count: arr.length,
-      total: arr.reduce((sum, tx) => {
-        // For amount, use withdrawal if present, else deposit, else amount
-        const amtCandidate =
-          tx['withdrawal amt.'] ?? tx['withdrawal'] ?? tx['debit'] ?? tx['dr'] ??
-          tx['deposit amt.'] ?? tx['credit'] ?? tx['cr'] ??
-          tx['amount'] ?? tx['amt'];
-        const amt = parseAmount(amtCandidate) || 0;
-        return sum + amt;
-      }, 0),
-      lastDate:
-        dateKeys.map(k => arr[arr.length - 1][k]).find(v => (typeof v === 'string' ? v.trim() : v)) || '',
+      total: arr.reduce((sum, tx) => sum + (parseAmount(getDebitAmt(tx) ?? getCreditAmt(tx)) || 0), 0),
+      lastDate: getTxDate(arr[arr.length - 1]),
       details: arr
-        .map(tx => ({
-          date: tx._date || '',
-          amount: typeof tx._amount === 'number' ? tx._amount : null,
-        }))
+        .map(tx => ({ date: tx._date || '', amount: typeof tx._amount === 'number' ? tx._amount : null }))
         .filter(item => item.date || typeof item.amount === 'number'),
     }));
 }
@@ -92,9 +148,12 @@ const StatCard = ({ icon, label, value, sub, color }) => (
   </div>
 );
 
-const MiniBar = ({ label, value, max }) => (
-  <div className="mini-bar-row">
-    <div className="mini-bar-label" title={label}>{label}</div>
+const MiniBar = ({ label, value, max, onClick, isOpen }) => (
+  <div className={`mini-bar-row${onClick ? ' mini-bar-clickable' : ''}${isOpen ? ' mini-bar-active' : ''}`} onClick={onClick}>
+    <div className="mini-bar-label" title={label}>
+      {onClick && <span className="expand-icon">{isOpen ? <FaChevronDown size={9}/> : <FaChevronRight size={9}/>}</span>}
+      {label}
+    </div>
     <div className="mini-bar-track">
       <div className="mini-bar-fill" style={{ width: `${Math.round((value / max) * 100)}%` }} />
     </div>
@@ -104,6 +163,8 @@ const MiniBar = ({ label, value, max }) => (
 
 const Insights = ({ recurring, payments, userStats, hasData }) => {
   const [openIndex, setOpenIndex] = useState(null);
+  const [openPaymentIndex, setOpenPaymentIndex] = useState(null);
+  const [openPayeeIndex, setOpenPayeeIndex] = useState(null);
   if (!hasData) return null;
 
   const maxMerchant = userStats.topMerchants?.[0]?.total || 1;
@@ -173,11 +234,25 @@ const Insights = ({ recurring, payments, userStats, hasData }) => {
               <thead><tr><th>Description</th><th>Amount</th><th>Date</th></tr></thead>
               <tbody>
                 {payments.map((p, i) => (
-                  <tr key={i}>
-                    <td style={{maxWidth:280,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.description}</td>
-                    <td className="amt-debit">{fmt(p.amount)}</td>
-                    <td className="date-cell">{p.date}</td>
-                  </tr>
+                  <React.Fragment key={i}>
+                    <tr onClick={() => setOpenPaymentIndex(openPaymentIndex === i ? null : i)} className="clickable-row">
+                      <td><span className="expand-icon">{openPaymentIndex === i ? <FaChevronDown size={10}/> : <FaChevronRight size={10}/>}</span>{p.description.slice(0, 38)}{p.description.length > 38 ? '\u2026' : ''}</td>
+                      <td className="amt-debit">{fmt(p.amount)}</td>
+                      <td className="date-cell">{p.date}</td>
+                    </tr>
+                    {openPaymentIndex === i && (
+                      <tr className="detail-row">
+                        <td colSpan={3}>
+                          <div className="payment-detail">
+                            <div className="payment-detail-item"><span className="detail-label">Full Description</span><span>{p.description}</span></div>
+                            {p.reference && <div className="payment-detail-item"><span className="detail-label">Reference / Cheque No.</span><span>{p.reference}</span></div>}
+                            {p.type && <div className="payment-detail-item"><span className="detail-label">Transaction Type</span><span>{p.type}</span></div>}
+                            {p.balance && <div className="payment-detail-item"><span className="detail-label">Balance After</span><span className="amt-debit">{p.balance}</span></div>}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
                 ))}
               </tbody>
             </table>
@@ -193,7 +268,30 @@ const Insights = ({ recurring, payments, userStats, hasData }) => {
               <div className="section-header"><FaStore color="#f57c00" /><span>Top Payees by Spend</span></div>
               <div className="mini-bars">
                 {userStats.topMerchants.map((m, i) => (
-                  <MiniBar key={i} label={m.name.slice(0, 32)} value={m.total} max={maxMerchant} />
+                  <React.Fragment key={i}>
+                    <MiniBar
+                      label={m.name.slice(0, 32)}
+                      value={m.total}
+                      max={maxMerchant}
+                      onClick={() => setOpenPayeeIndex(openPayeeIndex === i ? null : i)}
+                      isOpen={openPayeeIndex === i}
+                    />
+                    {openPayeeIndex === i && m.transactions && (
+                      <div className="payee-detail">
+                        <table className="table-compact">
+                          <thead><tr><th>Date</th><th>Amount</th></tr></thead>
+                          <tbody>
+                            {[...m.transactions].sort((a, b) => b.amount - a.amount).map((t, idx) => (
+                              <tr key={idx}>
+                                <td className="date-cell">{t.date || '\u2014'}</td>
+                                <td className="amt-debit">{fmt(t.amount)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </React.Fragment>
                 ))}
               </div>
             </div>
@@ -226,111 +324,68 @@ const StatementUploader = () => {
   const [fileName, setFileName] = useState('');
 
   function getPayments(data) {
-    // Show top 5 largest debits (non-recurring), using normalized keys; if DR/CR absent, treat any withdrawal as debit
-    const debits = data.filter(tx => {
-      const norm = buildNorm(tx);
-      const amtCandidate =
-        norm['withdrawal amt.'] ?? norm['withdrawal'] ?? norm['debit'] ?? norm['dr'] ??
-        norm['amount'] ?? norm['amt'];
-      const amt = parseAmount(amtCandidate);
-      if (amt === null) return false;
-      const drcr = (norm['dr / cr'] || norm['drcr'] || '').toString().toUpperCase();
-      if (drcr) return drcr === 'DR' || drcr === 'DEBIT';
-      // If no DR/CR, assume withdrawal indicates debit
-      return norm['withdrawal amt.'] || norm['withdrawal'] || norm['debit'] || norm['dr'];
-    });
-    const sorted = debits.sort((a, b) => {
-      const aNorm = buildNorm(a);
-      const bNorm = buildNorm(b);
-      const aAmt = parseAmount(aNorm['withdrawal amt.'] ?? aNorm['withdrawal'] ?? aNorm['debit'] ?? aNorm['dr'] ?? aNorm['amount'] ?? aNorm['amt']) || 0;
-      const bAmt = parseAmount(bNorm['withdrawal amt.'] ?? bNorm['withdrawal'] ?? bNorm['debit'] ?? bNorm['dr'] ?? bNorm['amount'] ?? bNorm['amt']) || 0;
-      return bAmt - aAmt;
-    });
-    return sorted.slice(0, 5).map(tx => {
-      const norm = buildNorm(tx);
-      const amt = parseAmount(norm['withdrawal amt.'] ?? norm['withdrawal'] ?? norm['debit'] ?? norm['dr'] ?? norm['amount'] ?? norm['amt']) || 0;
-      return {
-        description: norm['description'] || norm['desc'] || norm['narration'] || norm['remarks'] || '',
-        amount: amt,
-        date: norm['transaction date'] || norm['value date'] || norm['value dt'] || norm['date'] || norm['txn date'] || '',
-      };
-    });
+    const debits = data
+      .map(tx => ({ tx, norm: buildNorm(tx) }))
+      .filter(({ norm }) => {
+        const amt = parseAmount(getDebitAmt(norm));
+        return amt !== null && amt > 0 && isDebit(norm);
+      })
+      .sort((a, b) => (parseAmount(getDebitAmt(b.norm)) || 0) - (parseAmount(getDebitAmt(a.norm)) || 0));
+    return debits.slice(0, 5).map(({ norm }) => ({
+      description: getTxDesc(norm),
+      amount: parseAmount(getDebitAmt(norm)) || 0,
+      date: getTxDate(norm),
+      reference: findColVal(norm, 'ref no./cheque no.', 'chq/ref no.', 'chq / ref no.', 'reference no.', 'transaction id', 'txn id') || '',
+      balance: findColVal(norm, 'balance', 'closing balance', 'bal') || '',
+      type: findColVal(norm, 'transaction type', 'type', 'mode', 'transaction mode') || '',
+    }));
   }
 
   function getUserStats(data) {
-    const dateKeys = ['transaction date', 'value date', 'value dt', 'date', 'txn date'];
-    const getAmt = (norm, keys) => parseAmount(norm[keys[0]] ?? norm[keys[1]] ?? norm[keys[2]] ?? norm[keys[3]] ?? norm[keys[4]] ?? norm[keys[5]]) || 0;
-    const debitKeys = ['withdrawal amt.', 'withdrawal', 'debit', 'dr', 'amount', 'amt'];
-    const creditKeys = ['deposit amt.', 'deposit', 'credit', 'cr', 'amount', 'amt'];
+    const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
-    const debits = data.filter(tx => {
-      const norm = buildNorm(tx);
-      const amtCandidate = norm['withdrawal amt.'] ?? norm['withdrawal'] ?? norm['debit'] ?? norm['dr'] ?? norm['amount'] ?? norm['amt'];
-      const amt = parseAmount(amtCandidate);
-      if (amt === null) return false;
-      const drcr = (norm['dr / cr'] || norm['drcr'] || '').toString().toUpperCase();
-      if (drcr) return drcr === 'DR' || drcr === 'DEBIT';
-      return norm['withdrawal amt.'] || norm['withdrawal'] || norm['debit'] || norm['dr'];
-    });
+    const normed = data.map(tx => buildNorm(tx));
+    const debits  = normed.filter(norm => isDebit(norm)  && parseAmount(getDebitAmt(norm))  > 0);
+    const credits = normed.filter(norm => isCredit(norm) && parseAmount(getCreditAmt(norm)) > 0);
 
-    const credits = data.filter(tx => {
-      const norm = buildNorm(tx);
-      const amtCandidate = norm['deposit amt.'] ?? norm['deposit'] ?? norm['credit'] ?? norm['cr'];
-      const amt = parseAmount(amtCandidate);
-      if (amt === null || amt <= 0) return false;
-      const drcr = (norm['dr / cr'] || norm['drcr'] || '').toString().toUpperCase();
-      if (drcr) return drcr === 'CR' || drcr === 'CREDIT';
-      return norm['deposit amt.'] || norm['deposit'] || norm['credit'] || norm['cr'];
-    });
+    const totalSpent    = debits.reduce((s, n)  => s + (parseAmount(getDebitAmt(n))  || 0), 0);
+    const totalReceived = credits.reduce((s, n) => s + (parseAmount(getCreditAmt(n)) || 0), 0);
 
-    const totalSpent = debits.reduce((sum, tx) => sum + getAmt(buildNorm(tx), debitKeys), 0);
-    const totalReceived = credits.reduce((sum, tx) => {
-      const norm = buildNorm(tx);
-      return sum + (parseAmount(norm['deposit amt.'] ?? norm['deposit'] ?? norm['credit'] ?? norm['cr']) || 0);
-    }, 0);
-
-    const largestPayment = debits.reduce((max, tx) => {
-      const norm = buildNorm(tx);
-      const amt = getAmt(norm, debitKeys);
-      const desc = norm['narration'] || norm['description'] || norm['desc'] || norm['remarks'] || '';
-      return amt > max.amount ? { amount: amt, description: desc } : max;
+    const largestPayment = debits.reduce((max, norm) => {
+      const amt = parseAmount(getDebitAmt(norm)) || 0;
+      return amt > max.amount ? { amount: amt, description: getTxDesc(norm) } : max;
     }, { amount: 0, description: '' });
 
-    // Top merchants by total debit spend
+    // Top merchants
     const merchantMap = {};
-    debits.forEach(tx => {
-      const norm = buildNorm(tx);
-      const desc = norm['narration'] || norm['description'] || norm['desc'] || norm['remarks'] || 'Unknown';
-      const amt = getAmt(norm, debitKeys);
-      if (!desc) return;
-      merchantMap[desc] = (merchantMap[desc] || 0) + amt;
+    debits.forEach(norm => {
+      const desc = getTxDesc(norm) || 'Unknown';
+      const amt  = parseAmount(getDebitAmt(norm)) || 0;
+      const date = getTxDate(norm);
+      if (!merchantMap[desc]) merchantMap[desc] = { total: 0, transactions: [] };
+      merchantMap[desc].total += amt;
+      merchantMap[desc].transactions.push({ date, amount: amt });
     });
     const topMerchants = Object.entries(merchantMap)
-      .sort((a, b) => b[1] - a[1])
+      .sort((a, b) => b[1].total - a[1].total)
       .slice(0, 5)
-      .map(([name, total]) => ({ name, total }));
+      .map(([name, d]) => ({ name, total: d.total, transactions: d.transactions }));
 
-    // Monthly spend breakdown
+    // Monthly spend — date is already "DD/MM/YYYY" string from getTxDate
     const monthMap = {};
-    debits.forEach(tx => {
-      const norm = buildNorm(tx);
-      const dateStr = dateKeys.map(k => norm[k]).find(v => v && v.toString().trim()) || '';
-      const amt = getAmt(norm, debitKeys);
-      // Try to extract month/year from date string
-      const parts = dateStr.toString().split('/');
-      let label = '';
-      if (parts.length >= 2) {
-        // dd/mm/yy or dd/mm/yyyy
+    debits.forEach(norm => {
+      const dateStr = getTxDate(norm);
+      const amt = parseAmount(getDebitAmt(norm)) || 0;
+      const parts = dateStr.split('/');
+      if (parts.length >= 3) {
         const month = parseInt(parts[1]);
-        const year = parts[2] ? (parts[2].length === 2 ? '20' + parts[2] : parts[2]) : '';
-        const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-        label = month >= 1 && month <= 12 ? `${monthNames[month - 1]} ${year}` : '';
+        const year  = parts[2].length === 2 ? '20' + parts[2] : parts[2];
+        const label = month >= 1 && month <= 12 ? `${monthNames[month - 1]} ${year}` : '';
+        if (label) monthMap[label] = (monthMap[label] || 0) + amt;
       }
-      if (label) monthMap[label] = (monthMap[label] || 0) + amt;
     });
     const monthlySpend = Object.entries(monthMap)
       .sort((a, b) => {
-        const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
         const [aM, aY] = a[0].split(' ');
         const [bM, bY] = b[0].split(' ');
         return aY !== bY ? Number(aY) - Number(bY) : monthNames.indexOf(aM) - monthNames.indexOf(bM);
@@ -338,15 +393,13 @@ const StatementUploader = () => {
       .slice(-6)
       .map(([month, total]) => ({ month, total }));
 
-    const avgTransaction = debits.length ? totalSpent / debits.length : 0;
-
     return {
       totalSpent,
       totalReceived,
       largestPayment,
       paymentCount: debits.length,
       creditCount: credits.length,
-      avgTransaction,
+      avgTransaction: debits.length ? totalSpent / debits.length : 0,
       topMerchants,
       monthlySpend,
     };
@@ -393,7 +446,23 @@ const StatementUploader = () => {
         }
           // Clean headers: strip asterisks, trim, lower-case
           const headers = rows[headerRowIdx].map(h => normalizeKey(h));
-          const dataRows = rows.slice(headerRowIdx + 1);
+
+          // Detect footer/summary section — stop before it
+          const isSummaryRow = (row) => {
+            const cells = row.map(c => (c || '').toString().toLowerCase().trim());
+            const nonEmpty = cells.filter(c => c.length > 0);
+            const firstCell = nonEmpty[0] || '';
+            return FOOTER_KEYWORDS.some(kw => firstCell.startsWith(kw));
+          };
+
+          const rawDataRows = rows.slice(headerRowIdx + 1);
+          // Find first footer row index and truncate
+          let endIdx = rawDataRows.length;
+          for (let i = 0; i < rawDataRows.length; i++) {
+            if (isSummaryRow(rawDataRows[i])) { endIdx = i; break; }
+          }
+          const dataRows = rawDataRows.slice(0, endIdx);
+
           // Convert to array of objects, clean data: strip asterisks, trim
           let raw = dataRows.map(row => {
             const obj = {};
@@ -405,9 +474,10 @@ const StatementUploader = () => {
           });
           // Filter out rows that don't have a valid date or narration
           data = raw.filter(row => {
-            const date = row['date'] || row['value date'] || row['value dt'] || row['transaction date'] || row['txn date'];
-            const narration = row['narration'] || row['description'] || row['desc'] || row['remarks'] || row['particulars'];
-            return date && narration && date.toString().length > 0 && narration.toString().length > 0;
+            const norm = buildNorm(row);
+            const date = getTxDate(norm);
+            const desc = getTxDesc(norm);
+            return date && desc && date.length > 0 && desc.toString().trim().length > 0;
           }).map(row => buildNorm(row));
       } else {
         setError('Please upload a CSV or Excel file.');
