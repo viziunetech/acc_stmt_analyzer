@@ -21,7 +21,8 @@ function App() {
   const handleActivated = ({ key, email }) => {
     setIsPro(true);
     setProEmail(email);
-    setUpgradeOpen(false);
+    // Don't close modal here — SuccessScreen inside the modal shows the key
+    // and closes itself only after the user acknowledges
   };
 
   const handleDeactivate = () => {

@@ -1,5 +1,6 @@
 require('dotenv').config({ path: require('path').join(__dirname, '.env') });
 const path       = require('path');
+const fs         = require('fs');
 const express    = require('express');
 const cors       = require('cors');
 const crypto     = require('crypto');
@@ -9,9 +10,32 @@ const nodemailer = require('nodemailer');
 const app  = express();
 const PORT = process.env.PORT || 3001;
 
-// ── In-memory license store (replace with DB in production) ──────────────
-// Structure: { [key]: { email, orderId, createdAt, valid } }
-const licenseStore = new Map();
+// ── File-backed license store ─────────────────────────────────────────────
+const LICENSES_FILE = path.join(__dirname, 'licenses.json');
+
+function loadLicenseStore() {
+  try {
+    if (fs.existsSync(LICENSES_FILE)) {
+      const data = JSON.parse(fs.readFileSync(LICENSES_FILE, 'utf8'));
+      return new Map(Object.entries(data));
+    }
+  } catch (e) {
+    console.warn('Could not load licenses.json:', e.message);
+  }
+  return new Map();
+}
+
+function saveLicenseStore() {
+  try {
+    const obj = Object.fromEntries(licenseStore);
+    fs.writeFileSync(LICENSES_FILE, JSON.stringify(obj, null, 2));
+  } catch (e) {
+    console.error('Could not save licenses.json:', e.message);
+  }
+}
+
+const licenseStore = loadLicenseStore();
+console.log(`📋 Loaded ${licenseStore.size} license(s) from disk`);
 
 // ── Razorpay instance ────────────────────────────────────────────────────
 const razorpayConfigured =
@@ -25,15 +49,18 @@ const razorpay = razorpayConfigured
 if (!razorpayConfigured) console.warn('⚠️  Razorpay keys not configured — /create-order will return 503');
 
 // ── Mailer ───────────────────────────────────────────────────────────────
-const transporter = nodemailer.createTransport({
-  host:   process.env.SMTP_HOST,
-  port:   Number(process.env.SMTP_PORT) || 587,
-  secure: false,
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-});
+const smtpConfigured = !!(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
+
+const transporter = smtpConfigured
+  ? nodemailer.createTransport({
+      host:   process.env.SMTP_HOST,
+      port:   Number(process.env.SMTP_PORT) || 587,
+      secure: false,
+      auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+    })
+  : null;
+
+if (!smtpConfigured) console.warn('⚠️  SMTP not configured — license keys will NOT be emailed');
 
 // ── Middleware ───────────────────────────────────────────────────────────
 app.use(cors({ origin: process.env.FRONTEND_URL || '*' }));
@@ -53,6 +80,10 @@ function generateLicenseKey(email, orderId) {
 }
 
 async function sendLicenseEmail(email, key) {
+  if (!smtpConfigured) {
+    console.log(`📧 Email skipped (SMTP not configured) — key for ${email}: ${key}`);
+    return;
+  }
   const appUrl = process.env.FRONTEND_URL || 'https://spendlens.com';
   await transporter.sendMail({
     from:    process.env.EMAIL_FROM,
@@ -98,6 +129,7 @@ app.post('/api/dev-activate', (req, res) => {
 
   const key = generateLicenseKey(email, 'dev_' + Date.now());
   licenseStore.set(key, { email, orderId: 'DEV', createdAt: new Date().toISOString(), valid: true });
+  saveLicenseStore();
   console.log(`🧪 Dev license issued: ${key} → ${email}`);
   res.json({ ok: true, key });
 });
@@ -152,6 +184,7 @@ app.post('/api/webhook', (req, res) => {
 
     const key = generateLicenseKey(email, orderId);
     licenseStore.set(key, { email, orderId, createdAt: new Date().toISOString(), valid: true });
+    saveLicenseStore();
     console.log(`✅ License issued: ${key} → ${email}`);
 
     sendLicenseEmail(email, key).catch(err => console.error('Email error:', err));
@@ -188,6 +221,7 @@ app.post('/api/verify-payment', async (req, res) => {
     // Payment verified — issue key
     const key = generateLicenseKey(email, razorpay_order_id);
     licenseStore.set(key, { email, orderId: razorpay_order_id, createdAt: new Date().toISOString(), valid: true });
+    saveLicenseStore();
     console.log(`✅ License issued (verify): ${key} → ${email}`);
 
     sendLicenseEmail(email, key).catch(err => console.error('Email error:', err));

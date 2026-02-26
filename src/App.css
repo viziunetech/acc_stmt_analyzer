@@ -1467,16 +1467,12 @@ body {
 }
 .upgrade-feature-row {
   display: flex;
-  align-items: flex-start;
-  gap: 0.65rem;
-  padding: 0.5rem 0.6rem;
-  background: #f8f9ff;
-  border-radius: 8px;
-  border: 1px solid var(--border);
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.38rem 0;
 }
-.upgrade-feature-icon { font-size: 1.1rem; flex-shrink: 0; margin-top: 1px; }
-.upgrade-feature-title { font-size: 0.84rem; font-weight: 700; color: var(--text); }
-.upgrade-feature-desc  { font-size: 0.76rem; color: var(--muted); margin-top: 1px; }
+.upgrade-feature-icon { display: flex; align-items: center; flex-shrink: 0; }
+.upgrade-feature-title { font-size: 0.83rem; color: var(--text); }
 
 .upgrade-price-row {
   display: flex;
@@ -1553,6 +1549,8 @@ body {
   letter-spacing: 3px;
   color: var(--brand);
   margin: 0.4rem 0;
+  position: relative;
+  user-select: all;
 }
 .upgrade-activate-tab { padding-top: 0.2rem; }
 

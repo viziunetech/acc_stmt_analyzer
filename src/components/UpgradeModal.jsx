@@ -5,11 +5,11 @@ const IS_DEV = import.meta.env.DEV;
 
 const PRICE    = '₹299';
 const FEATURES = [
-  ['📁', 'Multiple files', 'Combine statements from multiple accounts'],
-  ['📊', 'Full category drill-down', 'Click any category to see every transaction'],
-  ['💾', 'Session history', 'Saved locally — reload without re-uploading'],
-  ['⬇️', 'Export CSV & Excel', 'Download full reports with 4-sheet Excel'],
-  ['📅', 'Unlimited history', 'No statement date restrictions'],
+  'Upload multiple files — combine statements from multiple accounts',
+  'Full category drill-down — click any category to see every transaction',
+  'Session history — saved locally, reload without re-uploading',
+  'Export to CSV & Excel — 4-sheet report download',
+  'Unlimited date range — no statement date restrictions',
 ];
 
 // Loads Razorpay checkout script once
@@ -23,6 +23,76 @@ function loadRazorpayScript() {
     document.body.appendChild(s);
   });
 }
+
+// ── One-time success screen ───────────────────────────────────────────────
+const SuccessScreen = ({ licenseKey, email, onClose }) => {
+  const [copied,   setCopied]   = useState(false);
+  const [accepted, setAccepted] = useState(false);
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(licenseKey).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    });
+  };
+
+  return (
+    <div className="upgrade-success">
+      <div style={{
+        width: 48, height: 48, borderRadius: '50%',
+        background: 'linear-gradient(135deg,#4e54c8,#8f94fb)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        margin: '0 auto 1rem',
+      }}>
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="20 6 9 17 4 12" />
+        </svg>
+      </div>
+      <h3 className="upgrade-success-title">Pro License Activated</h3>
+
+      {/* One-time warning banner */}
+      <div style={{
+        background: '#fafafa', border: '1px solid #e5e7eb',
+        borderRadius: '8px', padding: '10px 14px', margin: '8px 0 12px',
+        fontSize: '0.81rem', color: '#374151', textAlign: 'left', lineHeight: '1.6',
+      }}>
+        <strong>Save this key.</strong> It will not be shown again after you close this window.
+        A copy has been sent to <strong>{email}</strong>.
+      </div>
+
+      {/* Key display + copy */}
+      <div style={{ position: 'relative', margin: '0 0 10px' }}>
+        <div className="upgrade-key-display" style={{ paddingRight: '5rem' }}>{licenseKey}</div>
+        <button
+          onClick={handleCopy}
+          style={{
+            position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)',
+            background: copied ? '#059669' : '#4e54c8', color: '#fff',
+            border: 'none', borderRadius: '6px', padding: '4px 14px',
+            fontSize: '0.78rem', cursor: 'pointer', fontWeight: 600, transition: 'background 0.2s',
+          }}
+        >
+          {copied ? 'Copied' : 'Copy'}
+        </button>
+      </div>
+
+      {/* Acknowledgement checkbox */}
+      <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.82rem', color: '#374151', cursor: 'pointer', margin: '4px 0 16px' }}>
+        <input type="checkbox" checked={accepted} onChange={e => setAccepted(e.target.checked)} />
+        I have saved my license key
+      </label>
+
+      <button
+        className="upgrade-pay-btn"
+        disabled={!accepted}
+        style={{ opacity: accepted ? 1 : 0.4, cursor: accepted ? 'pointer' : 'not-allowed' }}
+        onClick={onClose}
+      >
+        Start using Pro
+      </button>
+    </div>
+  );
+};
 
 // ── Tab 1: Buy via Razorpay ───────────────────────────────────────────────
 const BuyTab = ({ onSuccess, onError }) => {
@@ -57,7 +127,7 @@ const BuyTab = ({ onSuccess, onError }) => {
               email,
             });
             await saveLicense({ key: result.key, email, since: new Date().toISOString() });
-            onSuccess(result.key, email);
+            onSuccess(result.key, email, 'buy');
           } catch (e) {
             onError('Payment verified but key delivery failed. Email us with your payment ID: ' + response.razorpay_payment_id);
           }
@@ -75,13 +145,14 @@ const BuyTab = ({ onSuccess, onError }) => {
   return (
     <div className="upgrade-buy-tab">
       <div className="upgrade-features">
-        {FEATURES.map(([icon, title, desc], i) => (
+        {FEATURES.map((feat, i) => (
           <div key={i} className="upgrade-feature-row">
-            <span className="upgrade-feature-icon">{icon}</span>
-            <div>
-              <div className="upgrade-feature-title">{title}</div>
-              <div className="upgrade-feature-desc">{desc}</div>
-            </div>
+            <span className="upgrade-feature-icon">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#4e54c8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+            </span>
+            <div className="upgrade-feature-title">{feat}</div>
           </div>
         ))}
       </div>
@@ -105,23 +176,23 @@ const BuyTab = ({ onSuccess, onError }) => {
       </button>
 
       <p className="upgrade-fine-print">
-        🔒 Secure payment via Razorpay · UPI, cards, netbanking accepted · Key delivered instantly by email
+        Secured by Razorpay &middot; UPI, cards &amp; netbanking accepted &middot; Key delivered instantly
       </p>
 
       {IS_DEV && (
         <button
           className="upgrade-pay-btn"
-          style={{ marginTop: '0.5rem', background: 'linear-gradient(90deg,#059669,#34d399)', fontSize: '0.8rem', padding: '0.45rem' }}
+          style={{ marginTop: '0.5rem', background: '#059669', fontSize: '0.78rem', padding: '0.45rem' }}
           onClick={async () => {
             if (!email || !email.includes('@')) return onError('Enter a valid email first');
             try {
               const r = await devActivate(email);
               await saveLicense({ key: r.key, email, since: new Date().toISOString() });
-              onSuccess(r.key, email);
+              onSuccess(r.key, email, 'buy');
             } catch(e) { onError(e.message); }
           }}
         >
-          🧪 Dev: Get free test key
+          Dev: Activate test license
         </button>
       )}
     </div>
@@ -132,6 +203,7 @@ const BuyTab = ({ onSuccess, onError }) => {
 const ActivateTab = ({ onSuccess, onError }) => {
   const [key,     setKey]     = useState('');
   const [loading, setLoading] = useState(false);
+  const [activated, setActivated] = useState(false);
 
   const handleActivate = async () => {
     const cleaned = key.trim().toUpperCase();
@@ -141,13 +213,36 @@ const ActivateTab = ({ onSuccess, onError }) => {
       const result = await validateKeyOnServer(cleaned);
       if (!result.valid) throw new Error('Invalid or expired key. Check for typos or contact support.');
       await saveLicense({ key: cleaned, email: result.email, since: result.since });
-      onSuccess(cleaned, result.email);
+      onSuccess(cleaned, result.email, 'activate');
+      setActivated(true);
+      setTimeout(() => onClose(), 2200);
     } catch (e) {
       onError(e.message);
     } finally {
       setLoading(false);
     }
   };
+
+  if (activated) {
+    return (
+      <div style={{ textAlign: 'center', padding: '2rem 1rem' }}>
+        <div style={{
+          width: 48, height: 48, borderRadius: '50%',
+          background: 'linear-gradient(135deg,#4e54c8,#8f94fb)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          margin: '0 auto 1rem',
+        }}>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="20 6 9 17 4 12" />
+          </svg>
+        </div>
+        <h3 style={{ margin: '0 0 0.4rem', color: '#1b2230', fontSize: '1.1rem' }}>Pro Activated</h3>
+        <p style={{ color: '#6b7280', fontSize: '0.85rem', margin: 0 }}>
+          All Pro features are now unlocked.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="upgrade-activate-tab">
@@ -174,12 +269,16 @@ const ActivateTab = ({ onSuccess, onError }) => {
 const UpgradeModal = ({ onClose, onActivated }) => {
   const [tab,     setTab]     = useState('buy');   // 'buy' | 'activate'
   const [error,   setError]   = useState('');
-  const [success, setSuccess] = useState(null);    // { key, email }
+  const [success, setSuccess] = useState(null);    // { key, email, source }
 
-  const handleSuccess = (key, email) => {
+  const handleSuccess = (key, email, source = 'buy') => {
     setError('');
-    setSuccess({ key, email });
     onActivated({ key, email });
+    // For 'activate': ActivateTab shows its own success screen + calls onClose after delay
+    // For 'buy': show the one-time key display screen here in the modal
+    if (source !== 'activate') {
+      setSuccess({ key, email });
+    }
   };
 
   return (
@@ -197,16 +296,7 @@ const UpgradeModal = ({ onClose, onActivated }) => {
 
         {success ? (
           /* ── Success screen ── */
-          <div className="upgrade-success">
-            <div className="upgrade-success-icon">🎉</div>
-            <h3 className="upgrade-success-title">You're now Pro!</h3>
-            <p style={{ color: '#6b7280', fontSize: '0.88rem' }}>Your license key:</p>
-            <div className="upgrade-key-display">{success.key}</div>
-            <p style={{ fontSize: '0.8rem', color: '#9ca3af' }}>
-              A copy has been emailed to <strong>{success.email}</strong>. Keep it safe — works on any device.
-            </p>
-            <button className="upgrade-pay-btn" onClick={onClose}>Start using Pro →</button>
-          </div>
+          <SuccessScreen licenseKey={success.key} email={success.email} onClose={onClose} />
         ) : (
           <>
             {/* Tabs */}
