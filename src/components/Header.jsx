@@ -5,8 +5,8 @@ const Header = () => (
   <header className="app-header">
     <div className="app-header-inner">
       <div className="app-title">
-        <span>Subscription & Expense Intelligence</span>
-        <span className="app-subtitle">Turn statements into savings insights</span>
+        <span>Subscription &amp; Expense Intelligence</span>
+        <span className="app-subtitle">The only analyzer that works without sharing your bank login</span>
       </div>
       <div className="app-actions">
         <FaBell size={18} title="Alerts" />

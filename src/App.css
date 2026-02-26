@@ -1072,24 +1072,121 @@ body {
   white-space: nowrap;
 }
 
+/* ── Touch devices — remove 300ms tap delay ──────── */
+button, a, input, select, textarea {
+  touch-action: manipulation;
+}
+
 /* ── Responsive ───────────────────────────────────── */
+
+/* Tablet (≤900px) */
 @media (max-width: 900px) {
   .app-header-inner { padding: 0.6rem 0.9rem; }
   .app-title { font-size: 0.95rem; }
   .card { padding: 1rem 0.9rem; }
   .stat-cards-row { grid-template-columns: repeat(2, 1fr); }
   .bottom-grid { grid-template-columns: 1fr; }
+  .category-grid { grid-template-columns: 1fr; }
+  .section-block { padding: 0.7rem 0.8rem; }
 }
 
+/* Mobile (≤640px) */
 @media (max-width: 640px) {
-  .app-title { flex-direction: column; align-items: flex-start; gap: 0.2rem; }
-  .app-main { padding: 1rem 0.7rem 1.8rem; }
-  .stat-cards-row { grid-template-columns: repeat(2, 1fr); }
+  /* Header */
+  .app-header-inner { padding: 0.5rem 0.75rem; gap: 0.5rem; }
+  .app-title { flex-direction: column; align-items: flex-start; gap: 0.15rem; font-size: 0.88rem; }
+  .app-subtitle { display: none; }
+  .app-actions { gap: 0.6rem; }
+
+  /* Layout */
+  .app-main { padding: 0.75rem 0.5rem 1.5rem; }
+  .card { padding: 0.85rem 0.65rem; border-radius: 10px; }
+  .section-block { padding: 0.6rem 0.6rem; }
+  .insights-wrap { gap: 0.6rem; }
+
+  /* Stat cards */
+  .stat-cards-row { grid-template-columns: repeat(2, 1fr); gap: 0.5rem; }
+  .stat-card { padding: 0.6rem 0.7rem; gap: 0.45rem; }
+  .stat-card-value { font-size: 0.92rem; }
+  .stat-card-label { font-size: 0.67rem; }
+  .stat-card-sub { font-size: 0.7rem; }
+
+  /* Tables — horizontal scroll on mobile */
+  .table-compact {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    white-space: nowrap;
+  }
+  .table-compact th, .table-compact td { font-size: 0.78rem; padding: 0.3rem 0.45rem; }
+
+  /* Category bars */
+  .category-grid { grid-template-columns: 1fr; }
+  .category-bar-row { grid-template-columns: 110px 1fr auto; }
+
+  /* Bottom grid */
   .bottom-grid { grid-template-columns: 1fr; }
-  .table-compact th, .table-compact td { font-size: 0.8rem; }
-  .hero-features { grid-template-columns: 1fr; }
-  .hero-headline { font-size: 1.1rem; }
+
+  /* Hero */
+  .hero-headline { font-size: 1rem; }
+  .hero-sub { font-size: 0.83rem; }
+  .hero-features { grid-template-columns: 1fr; gap: 0.6rem; }
+  .hero-state { padding: 1.2rem 0.25rem 0.8rem; }
+
+  /* Subscriptions */
   .sub-monthly-est { display: none; }
+
+  /* Modal */
+  .modal-backdrop { padding: 0.5rem; align-items: flex-end; }
+  .modal-panel { border-radius: 14px 14px 10px 10px; max-height: 92vh; }
+  .modal-header { padding: 0.75rem 1rem 0.6rem; }
+  .modal-body { padding: 0.4rem 0.8rem 0.8rem; }
+  .modal-toolbar { padding: 0.45rem 0.8rem; flex-wrap: wrap; }
+  .modal-stat { padding: 0.5rem 0.75rem; }
+  .modal-stat-value { font-size: 0.92rem; }
+
+  /* Payment detail */
+  .detail-label { min-width: 110px; }
+  .payment-detail-item { font-size: 0.79rem; }
+
+  /* Export bar */
+  .export-bar { justify-content: flex-start; gap: 0.4rem; }
+  .export-btn { font-size: 0.74rem; padding: 0.3em 0.7em; }
+
+  /* Date range */
+  .date-range-bar { flex-wrap: wrap; gap: 0.35rem 0.6rem; }
+
+  /* File chips */
+  .file-chips { gap: 0.35rem; }
+  .file-chip-name { max-width: 130px; }
+
+  /* Upload box */
+  .upload-box { font-size: 0.9rem; padding: 0.75rem 0.85rem; }
+
+  /* Section header */
+  .section-header { font-size: 0.82rem; }
+}
+
+/* Extra-small phones (≤400px) */
+@media (max-width: 400px) {
+  .app-header-inner { padding: 0.45rem 0.6rem; }
+  .app-title { font-size: 0.82rem; }
+  .app-actions svg { width: 15px !important; height: 15px !important; }
+
+  .stat-cards-row { grid-template-columns: 1fr 1fr; gap: 0.35rem; }
+  .stat-card { padding: 0.5rem 0.55rem; }
+  .stat-card-value { font-size: 0.85rem; }
+
+  .category-bar-row { grid-template-columns: 90px 1fr auto; }
+
+  .modal-stats { flex-wrap: wrap; }
+  .modal-stat { flex-basis: 50%; border-right: none; border-bottom: 1px solid var(--border); }
+  .modal-stat:last-child { border-bottom: none; }
+
+  .hero-features { grid-template-columns: 1fr; }
+
+  .card { padding: 0.75rem 0.55rem; }
+  .section-block { padding: 0.5rem 0.5rem; }
 }
 
 /* ── Hero / empty state ───────────────────────────── */
