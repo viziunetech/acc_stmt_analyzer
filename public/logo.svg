@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4e54c8"/>
+      <stop offset="100%" style="stop-color:#6f7cff"/>
+    </linearGradient>
+    <linearGradient id="lens-shine" x1="20%" y1="20%" x2="80%" y2="80%">
+      <stop offset="0%" style="stop-color:#ffffff;stop-opacity:0.35"/>
+      <stop offset="100%" style="stop-color:#ffffff;stop-opacity:0"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background circle -->
+  <circle cx="100" cy="100" r="100" fill="url(#bg)"/>
+
+  <!-- Lens outer ring -->
+  <circle cx="90" cy="90" r="44" fill="none" stroke="#ffffff" stroke-width="9" opacity="0.95"/>
+
+  <!-- Lens inner gleam -->
+  <circle cx="90" cy="90" r="44" fill="url(#lens-shine)"/>
+
+  <!-- Magnifier handle -->
+  <line x1="124" y1="124" x2="154" y2="154" stroke="#ffffff" stroke-width="11" stroke-linecap="round" opacity="0.95"/>
+
+  <!-- Bar chart inside lens (spend pattern) -->
+  <rect x="70" y="95" width="9" height="22" rx="2" fill="#ffffff" opacity="0.9"/>
+  <rect x="83" y="82" width="9" height="35" rx="2" fill="#ffffff" opacity="0.9"/>
+  <rect x="96" y="88" width="9" height="29" rx="2" fill="#ffffff" opacity="0.9"/>
+
+  <!-- Upward trend arrow tip -->
+  <polyline points="70,95 79,82 92,88 109,70" fill="none" stroke="#a5f3fc" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.85"/>
+  <polygon points="109,70 101,72 107,78" fill="#a5f3fc" opacity="0.85"/>
+</svg>

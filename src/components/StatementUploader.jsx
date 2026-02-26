@@ -1,8 +1,10 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import Card from './Card';
-import { FaFileCsv, FaCheckCircle, FaExclamationCircle, FaChevronDown, FaChevronRight, FaWallet, FaArrowDown, FaArrowUp, FaExchangeAlt, FaStore, FaDownload, FaFileExcel } from 'react-icons/fa';
+import { FaFileCsv, FaCheckCircle, FaExclamationCircle, FaChevronDown, FaChevronRight, FaWallet, FaArrowDown, FaArrowUp, FaExchangeAlt, FaStore, FaDownload, FaFileExcel, FaHistory } from 'react-icons/fa';
 import * as XLSX from '@e965/xlsx';
 import Papa from 'papaparse';
+import { saveSession, getAllSessions, deleteSession, clearAllSessions } from '../utils/historyDB';
+import HistoryPanel from './HistoryPanel';
 
 const cleanString = (val) => (typeof val === 'string' ? val.replace(/\*/g, '').trim() : val);
 const normalizeKey = (key) =>
@@ -702,8 +704,8 @@ const RecurringSection = ({ title, icon, items, multiFile, fileColorMap, fileInd
 
 const HeroState = () => (
   <div className="hero-state">
-    <div className="hero-headline">Turn your bank statement into savings insights</div>
-    <div className="hero-sub">Instantly see subscriptions, top spending categories and biggest payments — processed privately, right here in your browser.</div>
+    <div className="hero-headline"><span className="hero-brand">SpendLens</span> — See exactly where your money goes</div>
+    <div className="hero-sub">Upload your bank statement and instantly uncover subscriptions, top spending categories, and biggest payments — 100% private, processed right in your browser.</div>
     <div className="hero-features">
       <div className="hero-feature">
         <div className="hero-feature-icon">💳</div>
@@ -1026,8 +1028,62 @@ const HowToExport = () => {
 };
 
 const StatementUploader = () => {
-  const [loadedFiles, setLoadedFiles] = useState([]); // [{ id, name, data[] }]
+  const [loadedFiles, setLoadedFiles] = useState([]);
   const [error, setError]             = useState('');
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [sessions, setSessions]       = useState([]);
+  const sessionIdRef                  = useRef(null);
+  const loadingFromHistoryRef         = useRef(false);
+
+  // Load existing sessions from IndexedDB on first render
+  useEffect(() => {
+    getAllSessions().then(setSessions).catch(console.error);
+  }, []);
+
+  // Auto-save the current set of loaded files as a history session
+  useEffect(() => {
+    if (loadedFiles.length === 0) {
+      sessionIdRef.current = null;
+      return;
+    }
+    // Don't re-save when we just restored from history
+    if (loadingFromHistoryRef.current) {
+      loadingFromHistoryRef.current = false;
+      return;
+    }
+    if (!sessionIdRef.current) sessionIdRef.current = Date.now();
+    // Compute minimal stats inline (avoids stale useMemo closure)
+    const flat = loadedFiles.flatMap(f => f.data);
+    let totalSpent = 0;
+    flat.forEach(tx => {
+      const norm = buildNorm(tx);
+      if (isDebit(norm)) { const amt = parseAmount(getDebitAmt(norm)); if (amt > 0) totalSpent += amt; }
+    });
+    const session = {
+      id:           sessionIdRef.current,
+      savedAt:      new Date().toISOString(),
+      files:        loadedFiles.map(f => ({ name: f.name, txCount: f.data.length })),
+      totalTxCount: loadedFiles.length > 1 ? deduplicateData(flat).length : flat.length,
+      totalSpent,
+      dateRange:    null, // filled after stats compute below
+      loadedFiles,
+    };
+    // Compute date range for the summary label
+    const allDates = flat
+      .map(tx => { const norm = buildNorm(tx); return getTxDate(norm); })
+      .filter(d => d && d.includes('/'))
+      .map(d => { const [dd, mm, yyyy] = d.split('/'); return new Date(`${yyyy}-${mm}-${dd}`); })
+      .filter(d => !isNaN(d));
+    if (allDates.length) {
+      const minD = new Date(Math.min(...allDates));
+      const maxD = new Date(Math.max(...allDates));
+      const fmtD = (d) => d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+      session.dateRange = { from: fmtD(minD), to: fmtD(maxD), days: Math.round((maxD - minD) / 86400000) + 1 };
+    }
+    saveSession(session)
+      .then(() => getAllSessions().then(setSessions))
+      .catch(console.error);
+  }, [loadedFiles]);
 
   const allData   = useMemo(() => {
     const flat = loadedFiles.flatMap(f => f.data);
@@ -1329,10 +1385,29 @@ const StatementUploader = () => {
 
   const removeFile = (id) => setLoadedFiles(prev => prev.filter(f => f.id !== id));
 
+  const handleLoadSession = (session) => {
+    loadingFromHistoryRef.current = true;
+    sessionIdRef.current = session.id; // keep same id so we overwrite, not duplicate
+    setLoadedFiles(session.loadedFiles);
+    setError('');
+    setHistoryOpen(false);
+  };
+
+  const handleDeleteSession = (id) => {
+    deleteSession(id).catch(console.error);
+    setSessions(prev => prev.filter(s => s.id !== id));
+  };
+
+  const handleClearAll = () => {
+    clearAllSessions().catch(console.error);
+    setSessions([]);
+  };
+
   return (
+    <>
     <Card>
       <h2 className="upload-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <FaFileCsv color="#4e54c8" /> Upload Bank Statements
+        <img src="/logo.svg" alt="" style={{ width: 22, height: 22, borderRadius: 5 }} /> Upload to SpendLens
         <span className="badge-muted">CSV or Excel • multiple accounts → combined dashboard</span>
       </h2>
 
@@ -1364,12 +1439,23 @@ const StatementUploader = () => {
 
       <HowToExport />
 
-      <label htmlFor="statement-upload" className="upload-box">
-        <input id="statement-upload" type="file" accept=".csv,.xlsx,.xls" multiple onChange={handleFiles} style={{ display: 'none' }} />
-        {hasData
-          ? <>+ Add another account or statement</>  
-          : <>Click to select bank statements &nbsp;<span style={{fontWeight:400,fontSize:'0.85em',color:'#6b7280'}}>.csv · .xlsx · .xls</span></>}
-      </label>
+      <div className="upload-row">
+        <label htmlFor="statement-upload" className="upload-box">
+          <input id="statement-upload" type="file" accept=".csv,.xlsx,.xls" multiple onChange={handleFiles} style={{ display: 'none' }} />
+          {hasData
+            ? <>+ Add another account or statement</>
+            : <>Click to select bank statements &nbsp;<span style={{fontWeight:400,fontSize:'0.85em',color:'#6b7280'}}>.csv · .xlsx · .xls</span></>}
+        </label>
+        <button
+          className="history-open-btn"
+          onClick={() => setHistoryOpen(true)}
+          title="View previously uploaded statements"
+        >
+          <FaHistory size={12} />
+          History
+          {sessions.length > 0 && <span className="history-badge">{sessions.length}</span>}
+        </button>
+      </div>
 
       {/* Loaded file chips */}
       {loadedFiles.length > 0 && (
@@ -1399,6 +1485,17 @@ const StatementUploader = () => {
       {!hasData && <HeroState />}
       <Insights recurring={recurring} payments={payments} userStats={userStats} hasData={hasData} loadedFiles={loadedFiles} onExportCSV={exportCSV} onExportExcel={exportExcel} />
     </Card>
+
+    {historyOpen && (
+      <HistoryPanel
+        sessions={sessions}
+        onLoad={handleLoadSession}
+        onDelete={handleDeleteSession}
+        onClearAll={handleClearAll}
+        onClose={() => setHistoryOpen(false)}
+      />
+    )}
+    </>
   );
 };
 
