@@ -704,26 +704,15 @@ const RecurringSection = ({ title, icon, items, multiFile, fileColorMap, fileInd
 
 const HeroState = () => (
   <div className="hero-state">
-    <div className="hero-headline"><span className="hero-brand">SpendLens</span> — See exactly where your money goes</div>
-    <div className="hero-sub">Upload your bank statement and instantly uncover subscriptions, top spending categories, and biggest payments — 100% private, processed right in your browser.</div>
-    <div className="hero-features">
-      <div className="hero-feature">
-        <div className="hero-feature-icon">💳</div>
-        <div className="hero-feature-title">Detect Subscriptions</div>
-        <div className="hero-feature-desc">Spots Netflix, Spotify, EMIs and hidden recurring charges automatically</div>
-      </div>
-      <div className="hero-feature">
-        <div className="hero-feature-icon">📊</div>
-        <div className="hero-feature-title">Spending Patterns</div>
-        <div className="hero-feature-desc">Top payees, monthly trends and largest payments at a glance</div>
-      </div>
-      <div className="hero-feature">
-        <div className="hero-feature-icon">🔒</div>
-        <div className="hero-feature-title">100% Private</div>
-        <div className="hero-feature-desc">Your bank data never leaves your browser. No accounts, no server uploads</div>
-      </div>
+    <div className="hero-hints">
+      <span>Detects subscriptions &amp; EMIs</span>
+      <span className="hero-hint-sep">·</span>
+      <span>Categorises spending</span>
+      <span className="hero-hint-sep">·</span>
+      <span>Largest payments</span>
+      <span className="hero-hint-sep">·</span>
+      <span>100% private — runs in your browser</span>
     </div>
-    <div className="hero-cta-hint">↑ Upload your bank statement above to get started</div>
   </div>
 );
 
@@ -752,7 +741,7 @@ const Insights = ({ recurring, payments, userStats, hasData, loadedFiles, onExpo
       {/* Date range banner */}
       {userStats.dateRange && (
         <div className="date-range-bar">
-          <span className="date-range-label">📅 Statement period</span>
+          <span className="date-range-label">Statement period</span>
           <span className="date-range-value">{userStats.dateRange.from} &ndash; {userStats.dateRange.to}</span>
           <span className="date-range-days">{userStats.dateRange.days} days</span>
         </div>
@@ -789,8 +778,7 @@ const Insights = ({ recurring, payments, userStats, hasData, loadedFiles, onExpo
       {userStats.categorySpend?.length > 0 && (
         <div className="section-block">
           <div className="section-header">
-            <span>🏷️</span>
-            <span>Spending by Category</span>
+            <span>Spending by category</span>
             <span className="count-badge">{userStats.categorySpend.length}</span>
             <span className="section-hint">Click any row for details</span>
           </div>
@@ -832,7 +820,7 @@ const Insights = ({ recurring, payments, userStats, hasData, loadedFiles, onExpo
       {subscriptions.length > 0 && (
         <RecurringSection
           title="Subscriptions & EMIs"
-          icon={<span>💳</span>}
+          icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0,color:'#4e54c8'}}><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>}
           items={subscriptions}
           multiFile={multiFile}
           fileColorMap={fileColorMap}
@@ -1004,7 +992,7 @@ const HowToExport = () => {
   return (
     <div className="how-to-export">
       <button className="how-to-export-toggle" onClick={() => setOpen(o => !o)}>
-        <span>📊 How to download your bank statement</span>
+        <span>How to download your bank statement</span>
         <span className="how-to-export-chevron">{open ? '▲' : '▼'}</span>
       </button>
       {open && (
@@ -1425,7 +1413,9 @@ const StatementUploader = ({ isPro = false, onUpgrade }) => {
 
       <div className="trust-banner">
         <div className="trust-pill">
-          <span className="trust-icon">🔒</span>
+          <span className="trust-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          </span>
           <div>
             <div className="trust-title">100% Private</div>
             <div className="trust-desc">Data never leaves your device</div>
@@ -1433,7 +1423,9 @@ const StatementUploader = ({ isPro = false, onUpgrade }) => {
         </div>
         <div className="trust-divider" />
         <div className="trust-pill">
-          <span className="trust-icon">💻</span>
+          <span className="trust-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+          </span>
           <div>
             <div className="trust-title">Local Processing</div>
             <div className="trust-desc">Runs entirely in your browser</div>
@@ -1441,7 +1433,9 @@ const StatementUploader = ({ isPro = false, onUpgrade }) => {
         </div>
         <div className="trust-divider" />
         <div className="trust-pill">
-          <span className="trust-icon">⛔</span>
+          <span className="trust-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+          </span>
           <div>
             <div className="trust-title">No Uploads</div>
             <div className="trust-desc">Zero server contact, ever</div>
@@ -1458,7 +1452,15 @@ const StatementUploader = ({ isPro = false, onUpgrade }) => {
             ? isPro
               ? <>+ Add another account or statement</>
               : <><span style={{color:'#f59e0b'}}>🔒 Pro:</span> Add multiple accounts</>
-            : <>Click to select bank statements &nbsp;<span style={{fontWeight:400,fontSize:'0.85em',color:'#6b7280'}}>.csv · .xlsx · .xls</span></>}
+            : <div className="dropzone-content">
+                <svg className="dropzone-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="17 8 12 3 7 8"/>
+                  <line x1="12" y1="3" x2="12" y2="15"/>
+                </svg>
+                <span className="dropzone-label">Drop or click to upload</span>
+                <span className="dropzone-hint">.csv · .xlsx · .xls · multiple files</span>
+              </div>}
         </label>
         <button
           className="history-open-btn"
