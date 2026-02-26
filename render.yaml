@@ -1,13 +1,14 @@
 services:
   - type: web
-    name: spendlens-api
+    name: spendlens
     runtime: node
-    rootDir: server
-    buildCommand: npm install
-    startCommand: node server.js
+    buildCommand: npm install && npm run build && cd server && npm install
+    startCommand: node server/server.js
     envVars:
       - key: NODE_ENV
         value: production
+      - key: PORT
+        value: 3001
       - key: RAZORPAY_KEY_ID
         sync: false
       - key: RAZORPAY_KEY_SECRET
@@ -28,21 +29,3 @@ services:
         sync: false
       - key: FRONTEND_URL
         sync: false
-
-  - type: web
-    name: spendlens-frontend
-    runtime: static
-    buildCommand: npm install && npm run build
-    staticPublishPath: ./dist
-    pullRequestPreviewsEnabled: true
-    headers:
-      - path: /*
-        name: Cache-Control
-        value: public, max-age=0, must-revalidate
-      - path: /assets/*
-        name: Cache-Control
-        value: public, max-age=31536000, immutable
-    routes:
-      - type: rewrite
-        source: /*
-        destination: /index.html
