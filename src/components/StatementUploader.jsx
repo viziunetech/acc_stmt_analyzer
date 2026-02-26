@@ -727,7 +727,7 @@ const HeroState = () => (
   </div>
 );
 
-const Insights = ({ recurring, payments, userStats, hasData, loadedFiles, onExportCSV, onExportExcel }) => {
+const Insights = ({ recurring, payments, userStats, hasData, loadedFiles, onExportCSV, onExportExcel, isPro, onUpgrade }) => {
   const [openIndex, setOpenIndex] = useState(null);
   const [openSubIndex, setOpenSubIndex] = useState(null);
   const [openPaymentIndex, setOpenPaymentIndex] = useState(null);
@@ -761,16 +761,23 @@ const Insights = ({ recurring, payments, userStats, hasData, loadedFiles, onExpo
       {/* File legend — only when multiple files loaded */}
       {multiFile && <FileLegend loadedFiles={loadedFiles} colorMap={fileColorMap} indexMap={fileIndexMap} />}
 
-      {/* Export toolbar */}
-      <div className="export-bar">
-        <span className="export-bar-label"><FaDownload size={11}/> Export</span>
-        <button className="export-btn export-btn-csv" onClick={onExportCSV} title="Download all transactions as CSV">
-          <FaFileCsv size={13}/> CSV
-        </button>
-        <button className="export-btn export-btn-excel" onClick={onExportExcel} title="Download full report as Excel (4 sheets)">
-          <FaFileExcel size={13}/> Excel Report
-        </button>
-      </div>
+      {/* Export toolbar — Pro only */}
+      {isPro ? (
+        <div className="export-bar">
+          <span className="export-bar-label"><FaDownload size={11}/> Export</span>
+          <button className="export-btn export-btn-csv" onClick={onExportCSV} title="Download all transactions as CSV">
+            <FaFileCsv size={13}/> CSV
+          </button>
+          <button className="export-btn export-btn-excel" onClick={onExportExcel} title="Download full report as Excel (4 sheets)">
+            <FaFileExcel size={13}/> Excel Report
+          </button>
+        </div>
+      ) : (
+        <div className="pro-upsell-bar" onClick={onUpgrade}>
+          <span>🔒 Export to CSV &amp; Excel is a <strong>Pro</strong> feature</span>
+          <span className="pro-upsell-cta">Upgrade for ₹299 →</span>
+        </div>
+      )}
       <div className="stat-cards-row">
         <StatCard icon={<FaArrowDown size={16}/>} label="Total Debited" value={fmt(userStats.totalSpent)} sub={`${userStats.paymentCount} transactions`} color="#e53935" />
         <StatCard icon={<FaArrowUp size={16}/>} label="Total Credited" value={fmt(userStats.totalReceived)} sub={`${userStats.creditCount} transactions`} color="#2e7d32" />
@@ -1027,7 +1034,7 @@ const HowToExport = () => {
   );
 };
 
-const StatementUploader = () => {
+const StatementUploader = ({ isPro = false, onUpgrade }) => {
   const [loadedFiles, setLoadedFiles] = useState([]);
   const [error, setError]             = useState('');
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -1367,7 +1374,12 @@ const StatementUploader = () => {
   const handleFiles = async (e) => {
     setError('');
     const files = Array.from(e.target.files);
-    e.target.value = ''; // reset so same file can be re-selected after removal
+    e.target.value = '';
+    // Free plan: only 1 file
+    if (!isPro && loadedFiles.length >= 1) {
+      if (onUpgrade) onUpgrade();
+      return;
+    }
     for (const file of files) {
       if (loadedFiles.some(f => f.name === file.name)) {
         setError(`"${file.name}" is already loaded.`);
@@ -1443,7 +1455,9 @@ const StatementUploader = () => {
         <label htmlFor="statement-upload" className="upload-box">
           <input id="statement-upload" type="file" accept=".csv,.xlsx,.xls" multiple onChange={handleFiles} style={{ display: 'none' }} />
           {hasData
-            ? <>+ Add another account or statement</>
+            ? isPro
+              ? <>+ Add another account or statement</>
+              : <><span style={{color:'#f59e0b'}}>🔒 Pro:</span> Add multiple accounts</>
             : <>Click to select bank statements &nbsp;<span style={{fontWeight:400,fontSize:'0.85em',color:'#6b7280'}}>.csv · .xlsx · .xls</span></>}
         </label>
         <button
@@ -1483,7 +1497,7 @@ const StatementUploader = () => {
         </div>
       )}
       {!hasData && <HeroState />}
-      <Insights recurring={recurring} payments={payments} userStats={userStats} hasData={hasData} loadedFiles={loadedFiles} onExportCSV={exportCSV} onExportExcel={exportExcel} />
+      <Insights recurring={recurring} payments={payments} userStats={userStats} hasData={hasData} loadedFiles={loadedFiles} onExportCSV={exportCSV} onExportExcel={exportExcel} isPro={isPro} onUpgrade={onUpgrade} />
     </Card>
 
     {historyOpen && (
