@@ -1,41 +1,34 @@
 require('dotenv').config({ path: require('path').join(__dirname, '.env') });
 const path       = require('path');
-const fs         = require('fs');
 const express    = require('express');
 const cors       = require('cors');
 const crypto     = require('crypto');
 const Razorpay   = require('razorpay');
 const nodemailer = require('nodemailer');
+const { Redis }  = require('@upstash/redis');
 
 const app  = express();
 const PORT = process.env.PORT || 3001;
 
-// ── File-backed license store ─────────────────────────────────────────────
-const LICENSES_FILE = path.join(__dirname, 'licenses.json');
+// ── Upstash Redis license store ───────────────────────────────────────────
+const redis = new Redis({
+  url:   process.env.UPSTASH_REDIS_REST_URL,
+  token: process.env.UPSTASH_REDIS_REST_TOKEN,
+});
 
-function loadLicenseStore() {
-  try {
-    if (fs.existsSync(LICENSES_FILE)) {
-      const data = JSON.parse(fs.readFileSync(LICENSES_FILE, 'utf8'));
-      return new Map(Object.entries(data));
-    }
-  } catch (e) {
-    console.warn('Could not load licenses.json:', e.message);
-  }
-  return new Map();
+// Each license stored as:  license:<KEY>  →  JSON object
+async function setLicense(key, record) {
+  await redis.set(`license:${key}`, JSON.stringify(record));
 }
 
-function saveLicenseStore() {
-  try {
-    const obj = Object.fromEntries(licenseStore);
-    fs.writeFileSync(LICENSES_FILE, JSON.stringify(obj, null, 2));
-  } catch (e) {
-    console.error('Could not save licenses.json:', e.message);
-  }
+async function getLicense(key) {
+  const data = await redis.get(`license:${key}`);
+  if (!data) return null;
+  // Upstash auto-parses JSON — handle both string and object
+  return typeof data === 'string' ? JSON.parse(data) : data;
 }
 
-const licenseStore = loadLicenseStore();
-console.log(`📋 Loaded ${licenseStore.size} license(s) from disk`);
+console.log('🔴 Upstash Redis connected');
 
 // ── Razorpay instance ────────────────────────────────────────────────────
 const razorpayConfigured =
@@ -119,7 +112,7 @@ app.get('/api/health', (_req, res) => res.json({ ok: true }));
 
 // Dev-only: instantly issue a license key without going through Razorpay
 // Disabled automatically when DEV_MODE is not 'true'
-app.post('/api/dev-activate', (req, res) => {
+app.post('/api/dev-activate', async (req, res) => {
   if (process.env.DEV_MODE !== 'true') {
     return res.status(404).json({ error: 'Not found' });
   }
@@ -128,8 +121,7 @@ app.post('/api/dev-activate', (req, res) => {
     return res.status(400).json({ error: 'Valid email required' });
 
   const key = generateLicenseKey(email, 'dev_' + Date.now());
-  licenseStore.set(key, { email, orderId: 'DEV', createdAt: new Date().toISOString(), valid: true });
-  saveLicenseStore();
+  await setLicense(key, { email, orderId: 'DEV', createdAt: new Date().toISOString(), valid: true });
   console.log(`🧪 Dev license issued: ${key} → ${email}`);
   res.json({ ok: true, key });
 });
@@ -164,7 +156,7 @@ app.post('/api/create-order', async (req, res) => {
 });
 
 // 2. Razorpay payment webhook (auto-triggered after payment)
-app.post('/api/webhook', (req, res) => {
+app.post('/api/webhook', async (req, res) => {
   const sig      = req.headers['x-razorpay-signature'];
   const expected = crypto
     .createHmac('sha256', process.env.RAZORPAY_WEBHOOK_SECRET || '')
@@ -183,8 +175,7 @@ app.post('/api/webhook', (req, res) => {
     const orderId = payment.order_id;
 
     const key = generateLicenseKey(email, orderId);
-    licenseStore.set(key, { email, orderId, createdAt: new Date().toISOString(), valid: true });
-    saveLicenseStore();
+    await setLicense(key, { email, orderId, createdAt: new Date().toISOString(), valid: true });
     console.log(`✅ License issued: ${key} → ${email}`);
 
     sendLicenseEmail(email, key).catch(err => console.error('Email error:', err));
@@ -194,12 +185,12 @@ app.post('/api/webhook', (req, res) => {
 });
 
 // 3. Validate a license key
-app.post('/api/validate-key', (req, res) => {
+app.post('/api/validate-key', async (req, res) => {
   try {
     const { key } = req.body || {};
     if (!key) return res.status(400).json({ valid: false, error: 'Key required' });
 
-    const record = licenseStore.get(key.trim().toUpperCase());
+    const record = await getLicense(key.trim().toUpperCase());
     if (!record) return res.json({ valid: false });
 
     res.json({ valid: record.valid, email: record.email, since: record.createdAt });
@@ -225,8 +216,7 @@ app.post('/api/verify-payment', async (req, res) => {
 
     // Payment verified — issue key
     const key = generateLicenseKey(email, razorpay_order_id);
-    licenseStore.set(key, { email, orderId: razorpay_order_id, createdAt: new Date().toISOString(), valid: true });
-    saveLicenseStore();
+    await setLicense(key, { email, orderId: razorpay_order_id, createdAt: new Date().toISOString(), valid: true });
     console.log(`✅ License issued (verify): ${key} → ${email}`);
 
     sendLicenseEmail(email, key).catch(err => console.error('Email error:', err));
