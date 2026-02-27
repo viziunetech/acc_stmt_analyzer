@@ -195,13 +195,18 @@ app.post('/api/webhook', (req, res) => {
 
 // 3. Validate a license key
 app.post('/api/validate-key', (req, res) => {
-  const { key } = req.body;
-  if (!key) return res.status(400).json({ valid: false, error: 'Key required' });
+  try {
+    const { key } = req.body || {};
+    if (!key) return res.status(400).json({ valid: false, error: 'Key required' });
 
-  const record = licenseStore.get(key.trim().toUpperCase());
-  if (!record) return res.json({ valid: false });
+    const record = licenseStore.get(key.trim().toUpperCase());
+    if (!record) return res.json({ valid: false });
 
-  res.json({ valid: record.valid, email: record.email, since: record.createdAt });
+    res.json({ valid: record.valid, email: record.email, since: record.createdAt });
+  } catch (err) {
+    console.error('validate-key error:', err);
+    res.status(500).json({ valid: false, error: 'Internal error' });
+  }
 });
 
 // 4. Verify payment signature on client-side (after Razorpay checkout callback)
@@ -238,6 +243,13 @@ const distPath = path.join(__dirname, '..', 'dist');
 app.use(express.static(distPath));
 // SPA fallback — serve index.html for any non-API route
 app.get('*', (_req, res) => res.sendFile(path.join(distPath, 'index.html')));
+
+// ── Global error handler — always returns JSON, never empty body ──────────
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, next) => {
+  console.error('Unhandled error:', err);
+  res.status(500).json({ error: err.message || 'Internal server error' });
+});
 
 // ── Start ────────────────────────────────────────────────────────────────
 app.listen(PORT, () => console.log(`SpendLens running on :${PORT}  (API + UI)`));
