@@ -11,24 +11,28 @@ const app  = express();
 const PORT = process.env.PORT || 3001;
 
 // ── Upstash Redis license store ───────────────────────────────────────────
-const redis = new Redis({
-  url:   process.env.UPSTASH_REDIS_REST_URL,
-  token: process.env.UPSTASH_REDIS_REST_TOKEN,
-});
+const redisConfigured = !!(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN);
+
+const redis = redisConfigured
+  ? new Redis({ url: process.env.UPSTASH_REDIS_REST_URL, token: process.env.UPSTASH_REDIS_REST_TOKEN })
+  : null;
+
+if (!redisConfigured) console.warn('⚠️  Upstash Redis not configured — license keys will NOT persist across restarts');
+else console.log('🔴 Upstash Redis connected');
 
 // Each license stored as:  license:<KEY>  →  JSON object
 async function setLicense(key, record) {
+  if (!redis) return; // graceful no-op if not configured
   await redis.set(`license:${key}`, JSON.stringify(record));
 }
 
 async function getLicense(key) {
+  if (!redis) return null;
   const data = await redis.get(`license:${key}`);
   if (!data) return null;
   // Upstash auto-parses JSON — handle both string and object
   return typeof data === 'string' ? JSON.parse(data) : data;
 }
-
-console.log('🔴 Upstash Redis connected');
 
 // ── Razorpay instance ────────────────────────────────────────────────────
 const razorpayConfigured =
