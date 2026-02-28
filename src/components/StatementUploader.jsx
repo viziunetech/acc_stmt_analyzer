@@ -744,6 +744,8 @@ const Insights = ({ recurring, payments, userStats, hasData, loadedFiles, onExpo
   const subscriptions  = recurring.filter(r => r.isSubscription);
   const otherRecurring = recurring.filter(r => !r.isSubscription);
   const subMonthlyEst  = subscriptions.reduce((s, r) => s + (r.total / Math.max(r.count, 1)), 0);
+  const subTotal        = subscriptions.reduce((s, r) => s + r.total, 0);
+  const otherTotal      = otherRecurring.reduce((s, r) => s + r.total, 0);
 
   const maxMerchant = userStats.topMerchants?.[0]?.total || 1;
   const maxMonth = Math.max(...(userStats.monthlySpend?.map(m => m.total) || [1]), 1);
@@ -839,7 +841,7 @@ const Insights = ({ recurring, payments, userStats, hasData, loadedFiles, onExpo
           fileColorMap={fileColorMap}
           fileIndexMap={fileIndexMap}
           emptyMsg="No subscriptions found."
-          headerExtra={<span className="sub-monthly-est">~{fmt(subMonthlyEst)}/mo avg</span>}
+          headerExtra={<><span className="sub-monthly-est">~{fmt(subMonthlyEst)}/mo avg</span><span className="sub-total-badge">{fmt(subTotal)} total</span></>}
           extraClass="subscription-block"
         />
       )}
@@ -853,6 +855,7 @@ const Insights = ({ recurring, payments, userStats, hasData, loadedFiles, onExpo
         fileColorMap={fileColorMap}
         fileIndexMap={fileIndexMap}
         emptyMsg={subscriptions.length > 0 ? 'No other recurring payments.' : 'No recurring payments found.'}
+        headerExtra={otherRecurring.length > 0 && <span className="sub-monthly-est">{fmt(otherTotal)} total</span>}
       />
 
       {/* Two-column layout for bottom sections */}

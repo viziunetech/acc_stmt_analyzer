@@ -1754,6 +1754,16 @@ button, a, input, select, textarea {
   white-space: nowrap;
 }
 
+.sub-total-badge {
+  background: #fef3c7;
+  color: #92400e;
+  border-radius: 999px;
+  padding: 1px 9px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 .sub-service-name {
   font-weight: 600;
   color: var(--text);
