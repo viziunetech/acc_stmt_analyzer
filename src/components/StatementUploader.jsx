@@ -124,6 +124,7 @@ const SUBSCRIPTION_PATTERNS = [
   /google\s*(one|workspace)/i, /microsoft\s*(365|office)/i, /dropbox/i,
   /net\s*banking\s*si/i, /standing\s*instruct/i, /si\s*[-\u2013]\s*monthly/i,
   /\bemi\b/i, /loan\s*(emi|inst)/i,
+  /\bach\s*d[-\s]/i, /\bach\s*debit/i, /\bnach\s*d[-\s]/i, /\bnach\s*debit/i,
 ];
 
 // Colors assigned per loaded file (index-based)
@@ -264,6 +265,8 @@ const CATEGORY_MAP = [
   // More EMI patterns
   [/bajaj.*fin|bajajfinotp|\bbfl\d/i,  'EMI & Loans',  '💰', '#6a1b9a'],
   [/\bnach.*emi\b|\bemi.*nach\b/i,     'EMI & Loans',  '💰', '#6a1b9a'],
+  [/\bach\s*d[-\s]|\bach\s*debit/i,    'EMI & Loans',  '💰', '#6a1b9a'],
+  [/\bnach\s*d[-\s]|\bnach\s*debit/i,  'EMI & Loans',  '💰', '#6a1b9a'],
   // More Food & Dining
   [/caterer|catering|\bdhaba\b|\bdabha\b|tiffin|bhojan|bhojanalay/i, 'Food & Dining','🍔','#e53935'],
   [/\bchai\b|tea\s*(house|stall|shop)|snack\s*bar|fast\s*food/i,    'Food & Dining','☕','#6f4e37'],
@@ -369,7 +372,9 @@ const cleanMerchantName = (raw) => {
   // Strip common bank prefixes
   s = s
     .replace(/^\d+\s+/i, '')                               // leading numeric ID
-    .replace(/^(UPI|IMPS|NEFT|RTGS|ACH\s*DR|IB\s*BILLPAY\s*DR)[-\s:]+/i, '')
+    .replace(/^(UPI|IMPS|NEFT|RTGS|ACH\s*D[ER]?|ACH\s*DEBIT|NACH\s*D[ER]?|IB\s*BILLPAY\s*DR)[-\s:]+/i, '')
+    .replace(/^(ACH\s*D[-\s]+)/i, '')                          // ACH D- prefix
+    .replace(/-\d{6,}$/i, '')                                  // trailing reference number e.g. -414232975
     .replace(/^(EAW|ATW|NWD|IWD)[-\s][^-]+-[^-]+-/i, '')  // ATM prefix
     .replace(/^POS\s+[\dX\s]*/i, '')                       // POS prefix
     .replace(/^\d+[-\s]+/i, '')                            // remaining leading digits
