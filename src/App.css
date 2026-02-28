@@ -1776,8 +1776,7 @@ button, a, input, select, textarea {
   align-items: flex-end;
   padding: 0.5rem 0 0.25rem;
   overflow-x: auto;
-}
-.monthly-rec-cell {
+}.monthly-rec-cell {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1821,81 +1820,15 @@ button, a, input, select, textarea {
   color: #4c1d95;
   font-weight: 800;
 }
+.monthly-rec-cell {
+  cursor: pointer;
+}
+.monthly-rec-cell:hover .monthly-rec-bar {
+  filter: brightness(1.08);
+}
 
-/* Tooltip */
-.monthly-recurring-grid {
-  position: relative;
-}
-.monthly-rec-tooltip {
-  position: absolute;
-  top: -8px;
-  transform: translateX(-50%) translateY(-100%);
-  background: #1e1b4b;
-  color: #fff;
-  border-radius: 10px;
-  padding: 10px 12px;
-  min-width: 260px;
-  max-width: 320px;
-  z-index: 100;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.22);
-  pointer-events: none;
-}
-.monthly-rec-tooltip::after {
-  content: '';
-  position: absolute;
-  bottom: -6px;
-  left: 50%;
-  transform: translateX(-50%);
-  border-left: 6px solid transparent;
-  border-right: 6px solid transparent;
-  border-top: 6px solid #1e1b4b;
-}
-.mrt-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  border-bottom: 1px solid rgba(255,255,255,0.15);
-  padding-bottom: 6px;
-  margin-bottom: 6px;
-}
-.mrt-month {
-  font-size: 0.8rem;
-  font-weight: 700;
-  color: #c4b5fd;
-}
-.mrt-total {
-  font-size: 0.82rem;
-  font-weight: 800;
-  color: #a78bfa;
-}
-.mrt-rows {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  max-height: 220px;
+/* Month modal body max-height so it scrolls nicely */
+.month-rec-modal .modal-body {
+  max-height: 420px;
   overflow-y: auto;
-}
-.mrt-row {
-  display: grid;
-  grid-template-columns: 1fr auto auto;
-  gap: 6px;
-  align-items: center;
-  font-size: 0.74rem;
-}
-.mrt-desc {
-  color: #e0e7ff;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.mrt-date {
-  color: #94a3b8;
-  font-size: 0.68rem;
-  white-space: nowrap;
-}
-.mrt-amt {
-  color: #fca5a5;
-  font-weight: 700;
-  white-space: nowrap;
-  text-align: right;
 }

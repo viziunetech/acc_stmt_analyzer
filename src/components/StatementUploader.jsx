@@ -212,8 +212,8 @@ const CATEGORY_MAP = [
   [/practo/i,                          'Health',       '💊', '#5c6bc0'],
   [/apollo\s*(pharm|hosp)/i,           'Health',       '🏥', '#003d7c'],
   [/fortis|max\s*hosp|manipal\s*hosp/i,'Health',       '🏥', '#e53935'],
-  [/pharmacy|chemist|medical\s*store|med\s*shop/i, 'Health','💊','#e91e63'],
-  [/hospital|clinic|diagnostic|lab\s*test|pathology/i, 'Health','🏥','#e91e63'],
+  [/pharmacy|chemist|\bmedical\b|medical\s*store|med\s*shop/i, 'Health','💊','#e91e63'],
+  [/hospital|clinic|diagnostic|\blab\b|lab\s*test|pathology/i, 'Health','🏥','#e91e63'],
   // Education
   [/udemy/i,                           'Education',    '📚', '#a435f0'],
   [/coursera/i,                        'Education',    '📚', '#0056d2'],
@@ -353,26 +353,35 @@ const getCategory = (rawDesc, amount) => {
 
 const cleanMerchantName = (raw) => {
   if (!raw) return 'Unknown';
-  // Known merchant map tested on the full raw string first
+
+  // ── UPI transactions: extract display name BEFORE testing MERCHANT_MAP ────
+  // UPI format: [PREFIX-]DISPLAY NAME-vpaid@bankcode[-ref-UPI]
+  // The VPA ID (before @) contains no spaces; the display name may.
+  // Extracting first prevents bank VPA codes like "ICICIHCIC0DC0099" from
+  // being incorrectly matched as a merchant (e.g. → "ICICI").
+  if (raw.includes('@')) {
+    // Lazy match: grab display name up to the last -noSpaceVPA@bankCode
+    const m = raw.match(/^(?:(?:UPI|IMPS|NEFT|RTGS)[-\s]+)?(.+?)[-_]([A-Za-z0-9][A-Za-z0-9._-]{2,})@/i);
+    if (m) {
+      let name = m[1]
+        .replace(/^(UPI|IMPS|NEFT|RTGS)[-\s:]+/i, '')
+        .replace(/[_-]/g, ' ')
+        .replace(/\s{2,}/g, ' ')
+        .trim();
+      if (name.length > 1) {
+        for (const [pattern, mapped] of MERCHANT_MAP) {
+          if (pattern.test(name)) return mapped;
+        }
+        return name.replace(/\b\w/g, c => c.toUpperCase());
+      }
+    }
+  }
+
+  // Known merchant map tested on the full raw string (non-UPI)
   for (const [pattern, name] of MERCHANT_MAP) {
     if (pattern.test(raw)) return name;
   }
   let s = raw.trim();
-
-  // UPI string: extract the name part before the @handle
-  // e.g. "KOMALBEN ASHOKBHAI M-KOMALMISTRYSHARMA@OKSBI-BKID0002043-UPI" → "Komalben Ashokbhai"
-  // e.g. "JALSO THE FOOD COURT-GPAY@OKBIZAXIS-UTIB0000553-UPI"         → "Jalso The Food Court"
-  const upiMatch = s.match(/^([^@]{2,40})@[A-Z0-9]+[-.]?[A-Z0-9]*[-.]?[A-Z0-9]*/i);
-  if (upiMatch) {
-    // The name part is everything before the @, minus any trailing UPI handle prefix
-    let name = upiMatch[1]
-      .replace(/-(GPAY|PAYTM|YBL|OKAXIS|OKSBI|OKICICI|OKHDFCBANK|YESB|IDFCFIRST|INDUS|FEDERAL|AXIS|SBI|HDFC|ICICI|KOTAK)$/i, '')
-      .replace(/[\-_]([A-Z0-9]{8,})$/i, '')  // strip trailing UPI token
-      .replace(/[_-]/g, ' ')
-      .replace(/\s{2,}/g, ' ')
-      .trim();
-    if (name.length > 2) return name.replace(/\b\w/g, c => c.toUpperCase());
-  }
 
   // Strip GPAY@ / PhonePe@ prefixes
   s = s.replace(/^(GPAY|PHONEPE|PAYTM|BHIM)[\s@-]+/i, '');
@@ -735,7 +744,7 @@ const Insights = ({ recurring, payments, userStats, hasData, loadedFiles, onExpo
   const [openPaymentIndex, setOpenPaymentIndex] = useState(null);
   const [openPayeeIndex, setOpenPayeeIndex] = useState(null);
   const [categoryModal, setCategoryModal] = useState(null); // holds the selected category object
-  const [hoveredMonth, setHoveredMonth] = useState(null); // { key, x, y }
+  const [clickedMonth, setClickedMonth] = useState(null); // holds the selected month data for modal
   if (!hasData) return null;
 
   const multiFile    = loadedFiles.length > 1;
@@ -892,16 +901,13 @@ const Insights = ({ recurring, payments, userStats, hasData, loadedFiles, onExpo
             <span>Monthly Recurring Spend</span>
             <span className="section-hint">EMIs + subscriptions + recurring per month</span>
           </div>
-          <div className="monthly-recurring-grid" onMouseLeave={() => setHoveredMonth(null)}>
+          <div className="monthly-recurring-grid">
             {monthlyRecurring.map((m, i) => (
               <div
                 key={i}
-                className={`monthly-rec-cell${hoveredMonth?.key === m.key ? ' monthly-rec-hovered' : ''}`}
-                onMouseEnter={e => {
-                  const rect = e.currentTarget.getBoundingClientRect();
-                  const gridRect = e.currentTarget.closest('.monthly-recurring-grid').getBoundingClientRect();
-                  setHoveredMonth({ key: m.key, data: m, left: rect.left - gridRect.left + rect.width / 2 });
-                }}
+                className={`monthly-rec-cell${clickedMonth?.key === m.key ? ' monthly-rec-hovered' : ''}`}
+                onClick={() => setClickedMonth(m)}
+                title="Click to see all transactions"
               >
                 <div className="monthly-rec-bar-wrap">
                   <div
@@ -913,28 +919,52 @@ const Insights = ({ recurring, payments, userStats, hasData, loadedFiles, onExpo
                 <div className="monthly-rec-value">{fmt(m.total)}</div>
               </div>
             ))}
+          </div>
+        </div>
+      )}
 
-            {/* Hover tooltip */}
-            {hoveredMonth && (
-              <div
-                className="monthly-rec-tooltip"
-                style={{ left: hoveredMonth.left }}
-              >
-                <div className="mrt-header">
-                  <span className="mrt-month">{hoveredMonth.data.label}</span>
-                  <span className="mrt-total">{fmt(hoveredMonth.data.total)}</span>
-                </div>
-                <div className="mrt-rows">
-                  {hoveredMonth.data.txs.map((tx, i) => (
-                    <div key={i} className="mrt-row">
-                      <span className="mrt-desc" title={tx.desc}>{tx.desc.length > 28 ? tx.desc.slice(0, 27) + '…' : tx.desc}</span>
-                      <span className="mrt-date">{tx.date}</span>
-                      <span className="mrt-amt">{fmt(tx.amount)}</span>
-                    </div>
-                  ))}
-                </div>
+      {/* Month drill-down modal */}
+      {clickedMonth && (
+        <div className="modal-backdrop" onClick={() => setClickedMonth(null)}>
+          <div className="modal-panel month-rec-modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header" style={{ borderBottom: '3px solid #7c3aed' }}>
+              <span className="modal-title">
+                <span className="modal-emoji">📅</span>
+                {clickedMonth.label} — Recurring Spend
+                <span className="modal-count">{clickedMonth.txs.length} transactions</span>
+              </span>
+              <button className="modal-close" onClick={() => setClickedMonth(null)} aria-label="Close">&times;</button>
+            </div>
+            <div className="modal-stats">
+              <div className="modal-stat">
+                <div className="modal-stat-value" style={{ color: '#7c3aed' }}>{fmt(clickedMonth.total)}</div>
+                <div className="modal-stat-label">Total recurring</div>
               </div>
-            )}
+              <div className="modal-stat">
+                <div className="modal-stat-value">{fmt(clickedMonth.total / Math.max(clickedMonth.txs.length, 1))}</div>
+                <div className="modal-stat-label">Avg per transaction</div>
+              </div>
+              <div className="modal-stat">
+                <div className="modal-stat-value">{fmt(clickedMonth.txs[0]?.amount || 0)}</div>
+                <div className="modal-stat-label">Largest</div>
+              </div>
+            </div>
+            <div className="modal-body">
+              <table className="table-compact">
+                <thead>
+                  <tr><th style={{width:'55%'}}>Description</th><th>Date</th><th>Amount</th></tr>
+                </thead>
+                <tbody>
+                  {clickedMonth.txs.map((tx, idx) => (
+                    <tr key={idx}>
+                      <td title={tx.desc}>{tx.desc}</td>
+                      <td className="date-cell">{tx.date}</td>
+                      <td className="amt-debit">{fmt(tx.amount)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
