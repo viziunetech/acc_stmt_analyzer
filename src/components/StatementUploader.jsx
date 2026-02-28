@@ -735,6 +735,7 @@ const Insights = ({ recurring, payments, userStats, hasData, loadedFiles, onExpo
   const [openPaymentIndex, setOpenPaymentIndex] = useState(null);
   const [openPayeeIndex, setOpenPayeeIndex] = useState(null);
   const [categoryModal, setCategoryModal] = useState(null); // holds the selected category object
+  const [hoveredMonth, setHoveredMonth] = useState(null); // { key, x, y }
   if (!hasData) return null;
 
   const multiFile    = loadedFiles.length > 1;
@@ -756,15 +757,19 @@ const Insights = ({ recurring, payments, userStats, hasData, loadedFiles, onExpo
       const parts = d.split('/');
       if (parts.length < 3) return;
       const key = `${parts[2]}-${parts[1]}`; // YYYY-MM
-      recurringMonthMap[key] = (recurringMonthMap[key] || 0) + (tx.amount || 0);
+      if (!recurringMonthMap[key]) recurringMonthMap[key] = { total: 0, txs: [] };
+      recurringMonthMap[key].total += (tx.amount || 0);
+      recurringMonthMap[key].txs.push({ desc: r.description, amount: tx.amount || 0, date: tx.date || '' });
     });
   });
   const monthlyRecurring = Object.entries(recurringMonthMap)
     .sort(([a], [b]) => a.localeCompare(b))
-    .map(([key, total]) => {
+    .map(([key, { total, txs }]) => {
       const [yr, mo] = key.split('-');
       const label = new Date(Number(yr), Number(mo) - 1, 1).toLocaleString('default', { month: 'short', year: '2-digit' });
-      return { key, label, total };
+      // Sort txs by amount desc for tooltip
+      const sortedTxs = [...txs].sort((a, b) => b.amount - a.amount);
+      return { key, label, total, txs: sortedTxs };
     });
   const maxRecurringMonth = Math.max(...monthlyRecurring.map(m => m.total), 1);
 
@@ -887,9 +892,17 @@ const Insights = ({ recurring, payments, userStats, hasData, loadedFiles, onExpo
             <span>Monthly Recurring Spend</span>
             <span className="section-hint">EMIs + subscriptions + recurring per month</span>
           </div>
-          <div className="monthly-recurring-grid">
+          <div className="monthly-recurring-grid" onMouseLeave={() => setHoveredMonth(null)}>
             {monthlyRecurring.map((m, i) => (
-              <div key={i} className="monthly-rec-cell">
+              <div
+                key={i}
+                className={`monthly-rec-cell${hoveredMonth?.key === m.key ? ' monthly-rec-hovered' : ''}`}
+                onMouseEnter={e => {
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const gridRect = e.currentTarget.closest('.monthly-recurring-grid').getBoundingClientRect();
+                  setHoveredMonth({ key: m.key, data: m, left: rect.left - gridRect.left + rect.width / 2 });
+                }}
+              >
                 <div className="monthly-rec-bar-wrap">
                   <div
                     className="monthly-rec-bar"
@@ -900,6 +913,28 @@ const Insights = ({ recurring, payments, userStats, hasData, loadedFiles, onExpo
                 <div className="monthly-rec-value">{fmt(m.total)}</div>
               </div>
             ))}
+
+            {/* Hover tooltip */}
+            {hoveredMonth && (
+              <div
+                className="monthly-rec-tooltip"
+                style={{ left: hoveredMonth.left }}
+              >
+                <div className="mrt-header">
+                  <span className="mrt-month">{hoveredMonth.data.label}</span>
+                  <span className="mrt-total">{fmt(hoveredMonth.data.total)}</span>
+                </div>
+                <div className="mrt-rows">
+                  {hoveredMonth.data.txs.map((tx, i) => (
+                    <div key={i} className="mrt-row">
+                      <span className="mrt-desc" title={tx.desc}>{tx.desc.length > 28 ? tx.desc.slice(0, 27) + '…' : tx.desc}</span>
+                      <span className="mrt-date">{tx.date}</span>
+                      <span className="mrt-amt">{fmt(tx.amount)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
