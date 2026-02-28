@@ -747,6 +747,27 @@ const Insights = ({ recurring, payments, userStats, hasData, loadedFiles, onExpo
   const subTotal        = subscriptions.reduce((s, r) => s + r.total, 0);
   const otherTotal      = otherRecurring.reduce((s, r) => s + r.total, 0);
 
+  // Monthly recurring spend — built from all recurring txs grouped by YYYY-MM
+  const recurringMonthMap = {};
+  [...subscriptions, ...otherRecurring].forEach(r => {
+    (r.txs || []).forEach(tx => {
+      const d = tx._date || '';
+      // date is DD/MM/YYYY
+      const parts = d.split('/');
+      if (parts.length < 3) return;
+      const key = `${parts[2]}-${parts[1]}`; // YYYY-MM
+      recurringMonthMap[key] = (recurringMonthMap[key] || 0) + (tx._amount || 0);
+    });
+  });
+  const monthlyRecurring = Object.entries(recurringMonthMap)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, total]) => {
+      const [yr, mo] = key.split('-');
+      const label = new Date(Number(yr), Number(mo) - 1, 1).toLocaleString('default', { month: 'short', year: '2-digit' });
+      return { key, label, total };
+    });
+  const maxRecurringMonth = Math.max(...monthlyRecurring.map(m => m.total), 1);
+
   const maxMerchant = userStats.topMerchants?.[0]?.total || 1;
   const maxMonth = Math.max(...(userStats.monthlySpend?.map(m => m.total) || [1]), 1);
 
@@ -860,6 +881,18 @@ const Insights = ({ recurring, payments, userStats, hasData, loadedFiles, onExpo
 
       {/* Two-column layout for bottom sections */}
       <div className="bottom-grid">
+
+        {/* Monthly Recurring Spend */}
+        {monthlyRecurring.length > 0 && (
+          <div className="section-block">
+            <div className="section-header"><FaExchangeAlt color="#6a1b9a" /><span>Monthly Recurring Spend</span></div>
+            <div className="mini-bars">
+              {monthlyRecurring.map((m, i) => (
+                <MiniBar key={i} label={m.label} value={m.total} max={maxRecurringMonth} barColor="#7c3aed" />
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Top Payments */}
         <div className="section-block">
