@@ -750,13 +750,13 @@ const Insights = ({ recurring, payments, userStats, hasData, loadedFiles, onExpo
   // Monthly recurring spend — built from all recurring txs grouped by YYYY-MM
   const recurringMonthMap = {};
   [...subscriptions, ...otherRecurring].forEach(r => {
-    (r.txs || []).forEach(tx => {
-      const d = tx._date || '';
+    (r.details || []).forEach(tx => {
+      const d = tx.date || '';
       // date is DD/MM/YYYY
       const parts = d.split('/');
       if (parts.length < 3) return;
       const key = `${parts[2]}-${parts[1]}`; // YYYY-MM
-      recurringMonthMap[key] = (recurringMonthMap[key] || 0) + (tx._amount || 0);
+      recurringMonthMap[key] = (recurringMonthMap[key] || 0) + (tx.amount || 0);
     });
   });
   const monthlyRecurring = Object.entries(recurringMonthMap)
@@ -879,20 +879,33 @@ const Insights = ({ recurring, payments, userStats, hasData, loadedFiles, onExpo
         headerExtra={otherRecurring.length > 0 && <span className="sub-monthly-est">{fmt(otherTotal)} total</span>}
       />
 
+      {/* Monthly Recurring Spend — full width */}
+      {monthlyRecurring.length > 0 && (
+        <div className="section-block">
+          <div className="section-header">
+            <FaExchangeAlt color="#6a1b9a" />
+            <span>Monthly Recurring Spend</span>
+            <span className="section-hint">EMIs + subscriptions + recurring per month</span>
+          </div>
+          <div className="monthly-recurring-grid">
+            {monthlyRecurring.map((m, i) => (
+              <div key={i} className="monthly-rec-cell">
+                <div className="monthly-rec-bar-wrap">
+                  <div
+                    className="monthly-rec-bar"
+                    style={{ height: `${Math.round((m.total / maxRecurringMonth) * 100)}%` }}
+                  />
+                </div>
+                <div className="monthly-rec-label">{m.label}</div>
+                <div className="monthly-rec-value">{fmt(m.total)}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Two-column layout for bottom sections */}
       <div className="bottom-grid">
-
-        {/* Monthly Recurring Spend */}
-        {monthlyRecurring.length > 0 && (
-          <div className="section-block">
-            <div className="section-header"><FaExchangeAlt color="#6a1b9a" /><span>Monthly Recurring Spend</span></div>
-            <div className="mini-bars">
-              {monthlyRecurring.map((m, i) => (
-                <MiniBar key={i} label={m.label} value={m.total} max={maxRecurringMonth} barColor="#7c3aed" />
-              ))}
-            </div>
-          </div>
-        )}
 
         {/* Top Payments */}
         <div className="section-block">
