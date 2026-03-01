@@ -460,8 +460,18 @@ function deduplicateData(flat) {
   return result;
 }
 
-// Returns true if the given DD/MM/YYYY dates form a regular payment interval
-// (weekly / biweekly / monthly / quarterly / semi-annual / annual)
+// ── Recurring detection helpers ──────────────────────────────────────────────
+
+// Patterns that are NEVER recurring (one-off by nature)
+const NEVER_RECURRING_RE = /\bself\b[\s\S]{0,10}\ba\/?c\b|\bown\s*a\/?c\b|chq\s*paid|cheque\s*(paid|iss\w*)|clg\s+\d/i;
+
+// Patterns that ARE known recurring obligations (EMIs, utility SIs, subscriptions etc.)
+// Only transactions matching these are allowed into the recurring section.
+const KNOWN_RECURRING_RE = /\bemi\b|\bloan\b|\bach\s*d|\bnach\b|\becs\b|\bautopay\b|\bauto[\s-]?debit\b|standing\s*instruct|\bsi\s*[-–]\s*monthly\b|net\s*banking\s*si|netflix|spotify|hotstar|disney|prime\s*video|amazon\s*prime|youtube\s*premium|zee5|sonyliv|render\.com|github|notion|figma|openai|chatgpt|slack|\bzoom\b|google\s*(one|workspace)|microsoft\s*(365|office)|dropbox|\bsip\b|\bppf\b|\blic\b.*prem|insurance\s*prem|policy\s*prem|recharge|broadband|electricity|water\s*bill|piped\s*gas/i;
+
+// Returns true if DD/MM/YYYY dates form a strict regular interval
+// Periods: monthly (30d), bimonthly (60d), quarterly (91d), semi-annual (182d), annual (365d)
+// ±20% tolerance — tight enough to exclude irregular UPI payments
 function hasRegularInterval(dates) {
   if (dates.length < 2) return false;
   const ms = dates.map(d => {
@@ -474,25 +484,22 @@ function hasRegularInterval(dates) {
   const gaps = [];
   for (let i = 1; i < ms.length; i++) gaps.push((ms[i] - ms[i - 1]) / 86400000);
   const avg = gaps.reduce((s, g) => s + g, 0) / gaps.length;
-  // All consecutive gaps must be within 50% of the average
-  // (prevents burst-then-long-gap patterns looking regular)
-  if (gaps.some(g => g < avg * 0.5 || g > avg * 1.5)) return false;
-  // Average gap must match a known payment period (±35% tolerance)
-  return [7, 14, 30, 60, 91, 182, 365].some(p => Math.abs(avg - p) / p <= 0.35);
+  // Every gap must be within ±30% of the average (no burst-then-silence)
+  if (gaps.some(g => g < avg * 0.7 || g > avg * 1.3)) return false;
+  // Average must match a real billing period ±20%
+  return [30, 60, 91, 182, 365].some(p => Math.abs(avg - p) / p <= 0.20);
 }
 
 function detectRecurring(transactions) {
-  // Skip obvious one-off payment types that are never truly recurring
-  const SKIP_RE = /\bself\b[\s\S]{0,10}\ba\/?c\b|\bown\s*a\/?c\b|chq\s*paid|cheque\s*(paid|iss\w*)|clg\s+\d/i;
-
   const filtered = transactions.filter(tx => {
     const norm = buildNorm(tx);
     const desc = getTxDesc(norm);
     const amt = parseAmount(getDebitAmt(norm) ?? getCreditAmt(norm));
     if (!desc || amt === null || amt <= 0) return false;
-    // Skip self-transfers / cheque payments unless they explicitly match a subscription pattern
-    if (SKIP_RE.test(desc) && !isLikelySubscription(desc)) return false;
-    return true;
+    // Hard exclude one-off payment types
+    if (NEVER_RECURRING_RE.test(desc)) return false;
+    // Only include if it matches a known recurring obligation pattern
+    return KNOWN_RECURRING_RE.test(desc);
   });
 
   const map = {};
@@ -502,35 +509,22 @@ function detectRecurring(transactions) {
     const cleanedName = cleanMerchantName(rawDesc);
     const date = getTxDate(norm);
     const amount = parseAmount(getDebitAmt(norm) ?? getCreditAmt(norm));
-    const isSub = isLikelySubscription(rawDesc) || isLikelySubscription(cleanedName);
 
-    // Subscriptions/EMIs: group by name only (a few rupees variance is fine)
-    // Other payments: group by name + amount bucket so wildly different amounts
-    // (e.g. HDFC ₹5,50,000 vs HDFC ₹7,073) don't collapse into one group
-    let groupKey;
-    if (isSub) {
-      groupKey = cleanedName;
-    } else {
-      const bucket = amount < 500   ? Math.round(amount / 50) * 50
-                   : amount < 5000  ? Math.round(amount / 500) * 500
-                   : amount < 50000 ? Math.round(amount / 5000) * 5000
-                   :                  Math.round(amount / 50000) * 50000;
-      groupKey = `${cleanedName}||${bucket}`;
-    }
+    // Group by name + tight amount bucket so HDFC ₹25,708 and HDFC ₹11,322
+    // are separate EMI groups (different loans), not merged
+    const bucket = amount < 500   ? Math.round(amount / 50) * 50
+                 : amount < 5000  ? Math.round(amount / 500) * 500
+                 : amount < 50000 ? Math.round(amount / 2000) * 2000
+                 :                  Math.round(amount / 10000) * 10000;
+    const groupKey = `${cleanedName}||${bucket}`;
 
-    if (!map[groupKey]) map[groupKey] = { rawDesc, cleanedName, isSub, txs: [] };
+    if (!map[groupKey]) map[groupKey] = { rawDesc, cleanedName, txs: [] };
     map[groupKey].txs.push({ ...norm, _date: date, _amount: amount });
     if (isLikelySubscription(rawDesc)) map[groupKey].rawDesc = rawDesc;
   });
 
   return Object.entries(map)
-    .filter(([_, { isSub, txs }]) => {
-      // Subscriptions/EMIs: 2+ occurrences is enough (pattern match is strong signal)
-      if (isSub) return txs.length >= 2;
-      // Non-subscriptions: must appear at least 3 times AND at a regular interval
-      if (txs.length < 3) return false;
-      return hasRegularInterval(txs.map(tx => tx._date || '').filter(Boolean));
-    })
+    .filter(([_, { txs }]) => txs.length >= 2)
     .map(([_, { rawDesc, cleanedName, txs }]) => ({
       description: cleanedName,
       rawDescription: rawDesc,
