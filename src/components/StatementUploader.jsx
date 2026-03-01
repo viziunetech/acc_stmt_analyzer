@@ -118,7 +118,6 @@ const MERCHANT_MAP = [
   [/\bach\s*d[-\s]+kotak/i, 'Kotak Bank EMI'],
   [/\bach\s*d[-\s]+indusind/i, 'IndusInd Bank EMI'],
   [/\bach\s*d[-\s]+yes\s*bank/i, 'Yes Bank EMI'],
-  [/hdfc/i, 'HDFC'],  [/icici/i, 'ICICI'],
   [/swiggy/i, 'Swiggy'],            [/zomato/i, 'Zomato'],    [/amazon/i, 'Amazon'],
   [/flipkart/i, 'Flipkart'],        [/myntra/i, 'Myntra'],    [/paytm/i, 'Paytm'],
   [/phonepe/i, 'PhonePe'],          [/razorpay/i, 'Razorpay'],[/ola\b/i, 'Ola'],
@@ -461,35 +460,83 @@ function deduplicateData(flat) {
   return result;
 }
 
+// Returns true if the given DD/MM/YYYY dates form a regular payment interval
+// (weekly / biweekly / monthly / quarterly / semi-annual / annual)
+function hasRegularInterval(dates) {
+  if (dates.length < 2) return false;
+  const ms = dates.map(d => {
+    const p = (d || '').split('/');
+    if (p.length < 3) return NaN;
+    const yr = p[2].length <= 2 ? 2000 + Number(p[2]) : Number(p[2]);
+    return new Date(yr, Number(p[1]) - 1, Number(p[0])).getTime();
+  }).filter(v => !isNaN(v)).sort((a, b) => a - b);
+  if (ms.length < 2) return false;
+  const gaps = [];
+  for (let i = 1; i < ms.length; i++) gaps.push((ms[i] - ms[i - 1]) / 86400000);
+  const avg = gaps.reduce((s, g) => s + g, 0) / gaps.length;
+  // All consecutive gaps must be within 50% of the average
+  // (prevents burst-then-long-gap patterns looking regular)
+  if (gaps.some(g => g < avg * 0.5 || g > avg * 1.5)) return false;
+  // Average gap must match a known payment period (±35% tolerance)
+  return [7, 14, 30, 60, 91, 182, 365].some(p => Math.abs(avg - p) / p <= 0.35);
+}
+
 function detectRecurring(transactions) {
+  // Skip obvious one-off payment types that are never truly recurring
+  const SKIP_RE = /\bself\b[\s\S]{0,10}\ba\/?c\b|\bown\s*a\/?c\b|chq\s*paid|cheque\s*(paid|iss\w*)|clg\s+\d/i;
+
   const filtered = transactions.filter(tx => {
     const norm = buildNorm(tx);
     const desc = getTxDesc(norm);
     const amt = parseAmount(getDebitAmt(norm) ?? getCreditAmt(norm));
-    return desc && amt !== null && amt > 0;
+    if (!desc || amt === null || amt <= 0) return false;
+    // Skip self-transfers / cheque payments unless they explicitly match a subscription pattern
+    if (SKIP_RE.test(desc) && !isLikelySubscription(desc)) return false;
+    return true;
   });
+
   const map = {};
   filtered.forEach(tx => {
     const norm = buildNorm(tx);
     const rawDesc = getTxDesc(norm) || 'Unknown';
-    // Group by cleaned name so "POS … NETFLIX.COM" and "POS … NETFLIX COM" merge
-    const groupKey = cleanMerchantName(rawDesc);
+    const cleanedName = cleanMerchantName(rawDesc);
     const date = getTxDate(norm);
     const amount = parseAmount(getDebitAmt(norm) ?? getCreditAmt(norm));
-    if (!map[groupKey]) map[groupKey] = { rawDesc, txs: [] };
+    const isSub = isLikelySubscription(rawDesc) || isLikelySubscription(cleanedName);
+
+    // Subscriptions/EMIs: group by name only (a few rupees variance is fine)
+    // Other payments: group by name + amount bucket so wildly different amounts
+    // (e.g. HDFC ₹5,50,000 vs HDFC ₹7,073) don't collapse into one group
+    let groupKey;
+    if (isSub) {
+      groupKey = cleanedName;
+    } else {
+      const bucket = amount < 500   ? Math.round(amount / 50) * 50
+                   : amount < 5000  ? Math.round(amount / 500) * 500
+                   : amount < 50000 ? Math.round(amount / 5000) * 5000
+                   :                  Math.round(amount / 50000) * 50000;
+      groupKey = `${cleanedName}||${bucket}`;
+    }
+
+    if (!map[groupKey]) map[groupKey] = { rawDesc, cleanedName, isSub, txs: [] };
     map[groupKey].txs.push({ ...norm, _date: date, _amount: amount });
-    // Keep rawDesc as the one that best identifies the subscription (for isLikelySubscription)
-    // prefer whichever raw desc matches a subscription pattern
     if (isLikelySubscription(rawDesc)) map[groupKey].rawDesc = rawDesc;
   });
+
   return Object.entries(map)
-    .filter(([_, { txs }]) => txs.length > 1)
-    .map(([groupKey, { rawDesc, txs }]) => ({
-      description: groupKey,
+    .filter(([_, { isSub, txs }]) => {
+      // Subscriptions/EMIs: 2+ occurrences is enough (pattern match is strong signal)
+      if (isSub) return txs.length >= 2;
+      // Non-subscriptions: must appear at least 3 times AND at a regular interval
+      if (txs.length < 3) return false;
+      return hasRegularInterval(txs.map(tx => tx._date || '').filter(Boolean));
+    })
+    .map(([_, { rawDesc, cleanedName, txs }]) => ({
+      description: cleanedName,
       rawDescription: rawDesc,
-      isSubscription: isLikelySubscription(rawDesc) || isLikelySubscription(groupKey),
+      isSubscription: isLikelySubscription(rawDesc) || isLikelySubscription(cleanedName),
       count: txs.length,
-      total: txs.reduce((sum, tx) => sum + (parseAmount(getDebitAmt(tx) ?? getCreditAmt(tx)) || 0), 0),
+      total: txs.reduce((sum, tx) => sum + (tx._amount || 0), 0),
       lastDate: getTxDate(txs[txs.length - 1]),
       details: txs
         .map(tx => ({ date: tx._date || '', amount: typeof tx._amount === 'number' ? tx._amount : null, srcs: tx['__srcs'] || (tx['__src'] ? [tx['__src']] : []) }))
