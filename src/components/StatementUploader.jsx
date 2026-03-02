@@ -353,6 +353,26 @@ const getCategory = (rawDesc, amount) => {
 const cleanMerchantName = (raw) => {
   if (!raw) return 'Unknown';
 
+  // ── ACH D / NACH D: extract bank name + loan reference for EMI disambiguation ──
+  // e.g. "ACH D- HDFC BANK LTD-414232975"  → "HDFC Bank EMI  ·414232975"
+  // e.g. "NACH D- BAJAJ FINANCE-987654321"  → "Bajaj Finance EMI ·987654321"
+  const achMatch = raw.match(/\b(?:ACH|NACH)\s*D[-\s]+([A-Za-z][\w\s]*?)[-\s]+(\d{6,})/i);
+  if (achMatch) {
+    const bankPart = achMatch[1].trim();
+    const ref      = achMatch[2];
+    let bankName;
+    if      (/hdfc/i.test(bankPart))              bankName = 'HDFC Bank EMI';
+    else if (/icici/i.test(bankPart))             bankName = 'ICICI Bank EMI';
+    else if (/sbi|state\s*bank/i.test(bankPart))  bankName = 'SBI EMI';
+    else if (/axis/i.test(bankPart))              bankName = 'Axis Bank EMI';
+    else if (/kotak/i.test(bankPart))             bankName = 'Kotak Bank EMI';
+    else if (/indusind/i.test(bankPart))          bankName = 'IndusInd Bank EMI';
+    else if (/yes\s*bank/i.test(bankPart))        bankName = 'Yes Bank EMI';
+    else if (/bajaj/i.test(bankPart))             bankName = 'Bajaj Finance EMI';
+    else bankName = bankPart.replace(/\b(LTD|LIMITED|BANK|FINANCE|CORP|PVT)\b\.?/gi, '').trim() + ' EMI';
+    return `${bankName} ·${ref}`;
+  }
+
   // ── UPI transactions: extract display name BEFORE testing MERCHANT_MAP ────
   // UPI format: [PREFIX-]DISPLAY NAME-vpaid@bankcode[-ref-UPI]
   // The VPA ID (before @) contains no spaces; the display name may.
