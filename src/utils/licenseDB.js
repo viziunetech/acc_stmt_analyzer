@@ -1,10 +1,10 @@
 /**
- * SpendLens — Pro license helpers (IndexedDB-backed)
+ * CashScope — Pro license helpers (IndexedDB-backed)
  * Stores the validated license key locally so the user
  * doesn't need to re-enter it on every visit.
  */
 
-const DB_NAME    = 'spendlens-pro';
+const DB_NAME    = 'cashscope-pro';
 const DB_VERSION = 1;
 const STORE      = 'license';
 

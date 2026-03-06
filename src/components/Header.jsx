@@ -23,9 +23,9 @@ const Header = ({ isPro, proEmail, onUpgrade, onDeactivate }) => {
     <header className="app-header">
       <div className="app-header-inner">
         <div className="app-title">
-          <img src="/logo.svg" alt="SpendLens logo" className="header-logo" />
-          <span className="brand-name">SpendLens</span>
-          <span className="app-subtitle">See exactly where your money goes</span>
+          <img src="/logo.svg" alt="CashScope logo" className="header-logo" />
+          <span className="brand-name">CashScope</span>
+          <span className="app-subtitle">See where your money goes</span>
         </div>
         <div className="app-actions">
           {isPro ? (

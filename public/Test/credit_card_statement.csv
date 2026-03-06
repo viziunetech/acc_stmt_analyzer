@@ -1,0 +1,8 @@
+Transaction Date,Posting Date,Merchant,Amount,Type,Category
+2026-01-02,2026-01-03,Amazon,3200,Purchase,Shopping
+2026-01-05,2026-01-06,Swiggy,850,Purchase,Food
+2026-01-09,2026-01-10,Uber,450,Purchase,Transport
+2026-01-15,2026-01-16,Netflix,649,Subscription,Entertainment
+2026-01-18,2026-01-19,Flipkart,2200,Purchase,Shopping
+2026-01-22,2026-01-23,Fuel Station,3000,Purchase,Fuel
+2026-01-28,2026-01-29,Payment Received,-5000,Payment,Credit

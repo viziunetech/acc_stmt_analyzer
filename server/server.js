@@ -6,6 +6,7 @@ const crypto     = require('crypto');
 const Razorpay   = require('razorpay');
 const nodemailer = require('nodemailer');
 const { Redis }  = require('@upstash/redis');
+const { mountSeo } = require('./seoPages');
 
 const app  = express();
 const PORT = process.env.PORT || 3001;
@@ -81,15 +82,15 @@ async function sendLicenseEmail(email, key) {
     console.log(`📧 Email skipped (SMTP not configured) — key for ${email}: ${key}`);
     return;
   }
-  const appUrl = process.env.FRONTEND_URL || 'https://spendlens.com';
+  const appUrl = process.env.FRONTEND_URL || 'https://cashscope.in';
   await transporter.sendMail({
     from:    process.env.EMAIL_FROM,
     to:      email,
-    subject: '🔑 Your SpendLens Pro License Key',
+    subject: '🔑 Your CashScope Pro License Key',
     html: `
       <div style="font-family:sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#1b2230">
         <img src="${appUrl}/logo.svg" width="40" style="border-radius:8px;margin-bottom:12px" />
-        <h2 style="margin:0 0 8px">Welcome to SpendLens Pro! 🎉</h2>
+        <h2 style="margin:0 0 8px">Welcome to CashScope Pro! 🎉</h2>
         <p style="color:#6b7280">Here is your lifetime license key:</p>
         <div style="background:#f3f4ff;border:1.5px solid #c7d2fe;border-radius:10px;padding:16px 20px;margin:16px 0;font-size:1.4rem;font-weight:700;letter-spacing:2px;color:#4e54c8;text-align:center">
           ${key}
@@ -103,13 +104,16 @@ async function sendLicenseEmail(email, key) {
           If you lose it, reply to this email with your order details.
         </p>
         <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0"/>
-        <p style="font-size:0.78rem;color:#9ca3af">SpendLens · Your spending, crystal clear</p>
+        <p style="font-size:0.78rem;color:#9ca3af">CashScope · Your spending, crystal clear</p>
       </div>
     `,
   });
 }
 
 // ── Routes ───────────────────────────────────────────────────────────────
+
+// SEO landing pages (server-rendered HTML)
+mountSeo(app);
 
 // Health check
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
@@ -246,4 +250,4 @@ app.use((err, req, res, next) => {
 });
 
 // ── Start ────────────────────────────────────────────────────────────────
-app.listen(PORT, () => console.log(`SpendLens running on :${PORT}  (API + UI)`));
+app.listen(PORT, () => console.log(`CashScope running on :${PORT}  (API + UI)`));;

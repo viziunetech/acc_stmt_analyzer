@@ -1133,6 +1133,205 @@ body {
   flex-shrink: 0;
 }
 
+/* ── Month filter bar ─────────────────────────────── */
+.month-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  background: #f8f9ff;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.4rem 0.85rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.month-filter-bar::-webkit-scrollbar { display: none; }
+
+.month-filter-label {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 600;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.month-filter-pills {
+  display: flex;
+  gap: 0.3rem;
+  flex-wrap: nowrap;
+}
+
+.month-pill {
+  border: 1px solid var(--border);
+  background: white;
+  border-radius: 999px;
+  padding: 2px 11px;
+  font-size: 0.74rem;
+  font-weight: 500;
+  color: var(--text);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  line-height: 1.6;
+}
+.month-pill:hover {
+  background: #eef2ff;
+  border-color: var(--brand);
+  color: var(--brand);
+}
+.month-pill-active {
+  background: var(--brand) !important;
+  border-color: var(--brand) !important;
+  color: white !important;
+  font-weight: 700;
+}
+
+/* ── Category Rules button ────────────────────────── */
+.cat-rules-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+.cat-rules-btn:hover {
+  background: #eef2ff;
+  border-color: var(--brand);
+  color: var(--brand);
+}
+
+/* ── Category Rules modal ─────────────────────────── */
+.cat-rules-modal { max-width: 680px; width: 95vw; }
+
+.cat-rules-intro {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin: 0 0 1rem 0;
+  line-height: 1.5;
+}
+
+.cat-rules-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.cat-rules-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--border);
+}
+.cat-rules-row:last-child { border-bottom: none; }
+
+.cat-rules-name {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 148px;
+  flex-shrink: 0;
+}
+.cat-rules-emoji { font-size: 1rem; }
+
+.cat-rules-keywords {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.cat-rules-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid;
+  border-radius: 999px;
+  padding: 1px 9px;
+  font-size: 0.71rem;
+  font-weight: 500;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+/* Built-in (default) keywords — neutral grey */
+.cat-rules-tag-builtin {
+  border-color: #d0d5dd;
+  background: #f6f7f9;
+  color: #555e6d;
+}
+/* User-added custom keywords — coloured, removable */
+.cat-rules-tag-custom {
+  border-width: 1.5px;
+  font-weight: 600;
+}
+.cat-kw-remove {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.8rem;
+  line-height: 1;
+  padding: 0 0 0 2px;
+  opacity: 0.6;
+  color: inherit;
+}
+.cat-kw-remove:hover { opacity: 1; }
+
+/* Inline add-keyword controls */
+.cat-kw-add-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.cat-kw-input {
+  border: 1.5px solid var(--brand);
+  border-radius: 6px;
+  padding: 2px 8px;
+  font-size: 0.72rem;
+  outline: none;
+  width: 130px;
+  color: var(--text);
+}
+.cat-kw-add-confirm {
+  border: none;
+  border-radius: 6px;
+  padding: 2px 10px;
+  font-size: 0.71rem;
+  font-weight: 600;
+  color: white;
+  cursor: pointer;
+}
+.cat-kw-add-cancel {
+  background: none;
+  border: none;
+  font-size: 0.82rem;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0 2px;
+}
+.cat-kw-add-btn {
+  display: inline-flex;
+  align-items: center;
+  background: none;
+  border: 1px dashed;
+  border-radius: 999px;
+  padding: 1px 9px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  cursor: pointer;
+  opacity: 0.65;
+  transition: opacity 0.15s;
+  white-space: nowrap;
+}
+.cat-kw-add-btn:hover { opacity: 1; }
+
 /* ── Insights layout ──────────────────────────────── */
 .insights-wrap {
   margin-top: 1rem;
@@ -1733,6 +1932,27 @@ button, a, input, select, textarea {
   user-select: none;
 }
 
+.hero-actions {
+  margin-top: 0.75rem;
+  display: flex;
+  justify-content: center;
+}
+
+.hero-sample-btn {
+  border: 1px solid var(--border);
+  background: #fff;
+  color: var(--brand);
+  border-radius: 10px;
+  padding: 0.55rem 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.hero-sample-btn:hover {
+  border-color: var(--brand);
+  background: #eef2ff;
+}
+
 /* ── Subscription block ───────────────────────────── */
 .subscription-block {
   border-color: #c7d2fe;
@@ -1818,6 +2038,56 @@ button, a, input, select, textarea {
 .monthly-rec-hovered .monthly-rec-label,
 .monthly-rec-hovered .monthly-rec-value {
   color: #4c1d95;
+
+/* Single-month horizontal summary */
+.monthly-rec-single {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  background: #f5f3ff;
+  border: 1px solid #e9d5ff;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.monthly-rec-single:hover,
+.monthly-rec-single.monthly-rec-hovered {
+  background: #ede9fe;
+  border-color: #c4b5fd;
+}
+.monthly-rec-single-left {
+  min-width: 60px;
+}
+.monthly-rec-single-month {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #4c1d95;
+}
+.monthly-rec-single-hint {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+.monthly-rec-single-bar-wrap {
+  flex: 1;
+  height: 10px;
+  background: #ede9fe;
+  border-radius: 999px;
+  overflow: hidden;
+}
+.monthly-rec-single-bar {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, #7c3aed, #a78bfa);
+  border-radius: 999px;
+}
+.monthly-rec-single-total {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #6a1b9a;
+  white-space: nowrap;
+}
   font-weight: 800;
 }
 .monthly-rec-cell {

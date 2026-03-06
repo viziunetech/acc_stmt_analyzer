@@ -1,0 +1,10 @@
+Date,Description,Debit,Credit,Balance
+2026-02-01,Opening Balance,,200000,200000
+2026-02-02,Client Payment - ABC Pvt Ltd,,85000,285000
+2026-02-03,Office Rent,30000,,255000
+2026-02-05,Software Subscription,2500,,252500
+2026-02-08,Employee Salary,90000,,162500
+2026-02-12,Internet Bill,1500,,161000
+2026-02-15,Client Payment - XYZ Ltd,,120000,281000
+2026-02-20,Marketing Expense,10000,,271000
+2026-02-25,GST Payment,35000,,236000

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import Card from './Card';
 import { FaFileCsv, FaCheckCircle, FaExclamationCircle, FaChevronDown, FaChevronRight, FaWallet, FaArrowDown, FaArrowUp, FaExchangeAlt, FaStore, FaDownload, FaFileExcel, FaHistory } from 'react-icons/fa';
 import * as XLSX from '@e965/xlsx';
@@ -62,7 +62,21 @@ const getTxDate = (norm) => {
     const mm = String(raw.getMonth() + 1).padStart(2, '0');
     return `${dd}/${mm}/${raw.getFullYear()}`;
   }
-  return raw.toString();
+  // String date — normalise to DD/MM/YYYY
+  // Handles: "01-04-2025 22:14", "01-04-2025", "01/04/2025", "2025-04-01"
+  let s = raw.toString().trim();
+  // Strip trailing time component: "01-04-2025 22:14:05" → "01-04-2025"
+  s = s.replace(/\s+\d{1,2}:\d{2}(:\d{2})?(\s*(AM|PM))?$/i, '').trim();
+  // DD-MM-YYYY or DD/MM/YYYY or DD.MM.YYYY
+  const dmy = s.match(/^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{2,4})$/);
+  if (dmy) {
+    const yr = dmy[3].length === 2 ? '20' + dmy[3] : dmy[3];
+    return `${dmy[1].padStart(2,'0')}/${dmy[2].padStart(2,'0')}/${yr}`;
+  }
+  // ISO: YYYY-MM-DD or YYYY/MM/DD
+  const iso = s.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})$/);
+  if (iso) return `${iso[3].padStart(2,'0')}/${iso[2].padStart(2,'0')}/${iso[1]}`;
+  return s;
 };
 const getTxDesc = (norm) => findColVal(norm,
   'narration', 'description', 'desc', 'remarks', 'particulars', 'transaction details', 'details'
@@ -301,8 +315,57 @@ const CATEGORY_MAP = [
 // Detects UPI VPA handle in a transaction description
 const UPI_VPA_RE = /@(ok(?:axis|sbi|icici|hdfcbank)|ybl|idfcfirst|indus|federal|axisbank|apl|pthdfc|ptsbi|ptyes|okbizaxis|okhdfcbank)\b/i;
 
+// Human-readable category rules shown in the "How we categorize" modal
+const CATEGORY_RULES_DISPLAY = [
+  { name:'Streaming',      emoji:'📺', color:'#e50914', keywords:['Netflix','Spotify','Hotstar','Disney+','ZEE5','SonyLIV','Amazon Prime','YouTube Premium','JioCinema','MX Player','Apple TV'] },
+  { name:'Food & Dining',  emoji:'🍔', color:'#fc8019', keywords:['Swiggy','Zomato','Dominos','Pizza Hut','McDonald\'s','KFC','Subway','Burger King','Starbucks','CCD','Cafe / Coffee','Restaurant','Canteen','Caterer','Chai / Tea stall','Bakery / Mithai'] },
+  { name:'Groceries',      emoji:'🛒', color:'#4caf50', keywords:['BigBasket','Blinkit','Zepto','D-Mart','Reliance Fresh','JioMart','Nature Basket','Grocery / Supermarket','Kirana store'] },
+  { name:'Shopping',       emoji:'🛍️', color:'#ff9900', keywords:['Amazon','Flipkart','Myntra','Nykaa','Ajio','Meesho','Tata CLiQ','Snapdeal','Lenskart','FirstCry'] },
+  { name:'Travel',         emoji:'✈️', color:'#1565c0', keywords:['Uber','Ola','Rapido','RedBus','MakeMyTrip','Goibibo','Yatra','IRCTC','IndiGo','SpiceJet','Air India','OYO','Airbnb','Hotel / Resort','Cab / Taxi'] },
+  { name:'Fuel',           emoji:'⛽', color:'#795548', keywords:['Petrol','Diesel','Fuel','BPCL','HPCL','IOCL / Indian Oil','Shell','Nayara'] },
+  { name:'Health',         emoji:'💊', color:'#e91e63', keywords:['MedPlus','Netmeds','1mg','Practo','Apollo Pharmacy','Fortis','Max Hospital','Pharmacy / Chemist','Medical store','Hospital','Clinic','Diagnostic / Lab'] },
+  { name:'Education',      emoji:'📚', color:'#a435f0', keywords:['Udemy','Coursera','BYJU\'S','Unacademy','upGrad','Skillshare','School fee','College fee','Tuition','Exam fee'] },
+  { name:'Utilities',      emoji:'💡', color:'#f57c00', keywords:['Electricity (BESCOM, TNEB, MSEDCL, CESC, Adani, Tata Power)','Water bill / BWSSB','Piped gas (MGL, IGL)','LPG (Indane, Bharat Gas, HP Gas)','Broadband / Internet','Bill Pay'] },
+  { name:'Telecom',        emoji:'📱', color:'#0a6ebd', keywords:['Jio','Airtel','Vodafone / Vi','BSNL','Mobile bill','Postpaid','Prepaid recharge'] },
+  { name:'Insurance',      emoji:'🛡️', color:'#003d7c', keywords:['LIC','Life insurance','HDFC ERGO / Life','ICICI Lombard / Pru','Star Health','Care Health','Bajaj Allianz','Insurance premium','Policy premium'] },
+  { name:'Investments',    emoji:'📈', color:'#00d09c', keywords:['Groww','Zerodha / Kite','Upstox','Kuvera','Smallcase','Mutual Fund / SIP','NPS / PPF / ELSS','Demat / Brokerage','NSE / BSE'] },
+  { name:'EMI & Loans',    emoji:'💰', color:'#6a1b9a', keywords:['EMI','Loan EMI / repayment','Bajaj Finance','HDFC / ICICI / SBI loan','Home loan','Car loan','Personal loan','ACH debit','NACH debit','ECS'] },
+  { name:'ATM & Cash',     emoji:'🏧', color:'#455a64', keywords:['ATM withdrawal','Cash withdrawal','ATW / EAW / NWD'] },
+  { name:'Wallet & UPI',   emoji:'📲', color:'#00b9f1', keywords:['Paytm','MobiKwik','FreeCharge','BHIM'] },
+  { name:'Credit Card',    emoji:'💳', color:'#c62828', keywords:['Credit card payment','CC bill / due','HDFC / ICICI / SBI / Axis / Kotak CC'] },
+  { name:'Auto Debit',     emoji:'🔁', color:'#5c6bc0', keywords:['NACH','ECS','Mandate Pay','AutoPay','Auto Debit'] },
+  { name:'Housing & Rent', emoji:'🏠', color:'#795548', keywords:['Rent / Lease','PG / Paying Guest','Society maintenance','Property tax','BMC / NMC','Stamp duty'] },
+  { name:'Bank Charges',   emoji:'🏦', color:'#607d8b', keywords:['Service charge','Annual fee','Penalty','Bank fee','GST / TDS / TCS'] },
+  { name:'Taxes & Govt',   emoji:'🏛️', color:'#546e7a', keywords:['GST','TDS / TCS','Passport','Visa fee','RTO / Vahan','Traffic fine','e-Challan'] },
+  { name:'Donations',      emoji:'🤍', color:'#e91e63', keywords:['Donation','Charity','NGO','Foundation','PM CARES / Relief fund'] },
+  { name:'Transfers',      emoji:'🔄', color:'#607d8b', keywords:['NEFT','RTGS','IMPS','Self transfer','Own account','Cheque payment'] },
+  { name:'UPI Transfer',   emoji:'📲', color:'#0288d1', keywords:['Person-to-person UPI payment (no merchant match)'] },
+  { name:'Personal Transfer', emoji:'💸', color:'#0288d1', keywords:['Large round-number transfer (≥ ₹5,000, multiple of ₹500) with no category match'] },
+];
+
+// ── User-customizable category keywords ──────────────────────────────────────
+// Stored in localStorage as { categoryName: [kw1, kw2, ...] }
+// Checked BEFORE built-in rules so user overrides take precedence.
+let _customKeywords = (() => {
+  try { return JSON.parse(localStorage.getItem('acc_cat_custom') || '{}'); } catch { return {}; }
+})();
+const _saveCustomKeywords = (kws) => {
+  _customKeywords = kws;
+  try { localStorage.setItem('acc_cat_custom', JSON.stringify(kws)); } catch {}
+};
+const _escRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 const getCategory = (rawDesc, amount) => {
   if (!rawDesc) return { name: 'Other', emoji: '❓', color: '#9e9e9e' };
+
+  // User custom keywords — checked first so they override built-in rules
+  for (const [catName, kwds] of Object.entries(_customKeywords)) {
+    if (!kwds?.length) continue;
+    if (kwds.some(k => k && new RegExp(_escRe(k), 'i').test(rawDesc))) {
+      const disp = CATEGORY_RULES_DISPLAY.find(c => c.name === catName);
+      if (disp) return { name: disp.name, emoji: disp.emoji, color: disp.color };
+    }
+  }
 
   // Pass 1 — test the raw bank description as-is
   for (const [pattern, name, emoji, color] of CATEGORY_MAP) {
@@ -353,12 +416,21 @@ const getCategory = (rawDesc, amount) => {
 const cleanMerchantName = (raw) => {
   if (!raw) return 'Unknown';
 
-  // ── ACH D / NACH D: extract bank name + loan reference for EMI disambiguation ──
-  // e.g. "ACH D- HDFC BANK LTD-414232975"  → "HDFC Bank EMI  ·414232975"
-  // e.g. "NACH D- BAJAJ FINANCE-987654321"  → "Bajaj Finance EMI ·987654321"
-  const achMatch = raw.match(/\b(?:ACH|NACH)\s*D[-\s]+([A-Za-z][\w\s]*?)[-\s]+(\d{6,})/i);
+  // ── Bajaj Finance OTP/EMI: BFOTP-BFL12122470943-15936 ────────────────────
+  // "BFOTP-BFL12122470943-15936" → "Bajaj Finance EMI ·BFL12122470943"
+  const bfoMatch = raw.match(/\bBFOTP[-_]+(BFL[\w]+)/i);
+  if (bfoMatch) return `Bajaj Finance EMI ·${bfoMatch[1].toUpperCase()}`;
+
+  // ── ACH D / NACH D / DIRECT DEBIT: extract bank name + loan reference ──────
+  // "ACH D- HDFC BANK LTD-414232975"            → "HDFC Bank EMI ·414232975"
+  // "NACH D- BAJAJ FINANCE-987654321"            → "Bajaj Finance EMI ·987654321"
+  // "DIRECT DEBIT-DR-BAJAJ FINANCE LTD-P418SAH" → "Bajaj Finance EMI ·P418SAH"
+  // "NACH-10-DR-TP ACH BIRLA SUNLIFE-1978229160" → "Birla Sunlife EMI ·1978229160"
+  const achMatch = raw.match(
+    /\b(?:DIRECT\s*DEBIT[-\s]*DR|NACH[-\s]*\d*[-\s]*DR|(?:ACH|NACH)\s*D)[-\s]+([A-Za-z][\w\s]*?)[-\s]+((?=[A-Z0-9]*\d)[A-Z0-9]{4,})/i
+  );
   if (achMatch) {
-    const bankPart = achMatch[1].trim();
+    const bankPart = achMatch[1].replace(/\b(LTD|LIMITED|CORP|PVT|TP\s*ACH)\b\.?/gi, '').trim();
     const ref      = achMatch[2];
     let bankName;
     if      (/hdfc/i.test(bankPart))              bankName = 'HDFC Bank EMI';
@@ -369,8 +441,27 @@ const cleanMerchantName = (raw) => {
     else if (/indusind/i.test(bankPart))          bankName = 'IndusInd Bank EMI';
     else if (/yes\s*bank/i.test(bankPart))        bankName = 'Yes Bank EMI';
     else if (/bajaj/i.test(bankPart))             bankName = 'Bajaj Finance EMI';
-    else bankName = bankPart.replace(/\b(LTD|LIMITED|BANK|FINANCE|CORP|PVT)\b\.?/gi, '').trim() + ' EMI';
+    else if (/birla|sunlife/i.test(bankPart))     bankName = 'Birla Sunlife EMI';
+    else bankName = bankPart.replace(/\b(BANK|FINANCE)\b/gi, '').trim() + ' EMI';
     return `${bankName} ·${ref}`;
+  }
+
+  // ── Bajaj Finance fallback: any format with a numeric/BFL reference ─────────
+  // "ECS BAJAJ FINANCE LTD 987654321"      → "Bajaj Finance EMI ·987654321"
+  // "EMI 987654321 BAJAJ FINANCE LTD"      → "Bajaj Finance EMI ·987654321"
+  // "BAJAJFINANCEEMI00012122470943"         → "Bajaj Finance EMI ·12122470943"
+  // "BAJAJ FINANCE LIMITED"                → "Bajaj Finance EMI"  (no ref in string)
+  if (/bajaj.*fin|bajajfin|\bbfl[\d]/i.test(raw)) {
+    // Priority: BFL-prefixed alphanumeric ref
+    const bflRef = raw.match(/\b(BFL[A-Z0-9]{4,})\b/i);
+    if (bflRef) return `Bajaj Finance EMI ·${bflRef[1].toUpperCase()}`;
+    // Any alphanumeric ref at end of string (e.g. P418SAH11611958)
+    const endRef = raw.match(/[-\s\/]((?=[A-Z0-9]*\d)[A-Z0-9]{5,})\s*$/i);
+    if (endRef) return `Bajaj Finance EMI ·${endRef[1].toUpperCase()}`;
+    // Any 6+ digit number anywhere in the string (middle of description)
+    const numRef = raw.match(/\b(\d{6,})\b/);
+    if (numRef) return `Bajaj Finance EMI ·${numRef[1]}`;
+    return 'Bajaj Finance EMI';
   }
 
   // ── UPI transactions: extract display name BEFORE testing MERCHANT_MAP ────
@@ -487,7 +578,11 @@ const NEVER_RECURRING_RE = /\bself\b[\s\S]{0,10}\ba\/?c\b|\bown\s*a\/?c\b|chq\s*
 
 // Patterns that ARE known recurring obligations (EMIs, utility SIs, subscriptions etc.)
 // Only transactions matching these are allowed into the recurring section.
-const KNOWN_RECURRING_RE = /\bemi\b|\bloan\b|\bach\s*d|\bnach\b|\becs\b|\bautopay\b|\bauto[\s-]?debit\b|standing\s*instruct|\bsi\s*[-–]\s*monthly\b|net\s*banking\s*si|netflix|spotify|hotstar|disney|prime\s*video|amazon\s*prime|youtube\s*premium|zee5|sonyliv|render\.com|github|notion|figma|openai|chatgpt|slack|\bzoom\b|google\s*(one|workspace)|microsoft\s*(365|office)|dropbox|\bsip\b|\bppf\b|\blic\b.*prem|insurance\s*prem|policy\s*prem|recharge|broadband|electricity|water\s*bill|piped\s*gas/i;
+const KNOWN_RECURRING_RE = /\bemi\b|\bloan\b|\bach\s*d|\bnach\b|\becs\b|\bautopay\b|\bauto[\s-]?debit\b|direct\s*debit|standing\s*instruct|\bsi\s*[-–]\s*monthly\b|net\s*banking\s*si|netflix|spotify|hotstar|disney|prime\s*video|amazon\s*prime|youtube\s*premium|zee5|sonyliv|render\.com|github|notion|figma|openai|chatgpt|slack|\bzoom\b|google\s*(one|workspace)|microsoft\s*(365|office)|dropbox|\bsip\b|\bppf\b|\blic\b.*prem|insurance\s*prem|policy\s*prem|recharge|broadband|electricity|water\s*bill|piped\s*gas/i;
+
+// Well-known subscription-only merchants — shown in Subscriptions & EMIs even with 1 debit
+// (a user seeing Spotify once in a 1-month statement still wants to know it's a subscription)
+const KNOWN_SUBSCRIPTION_MERCHANTS_RE = /netflix|spotify|hotstar|disney|prime\s*video|amazon\s*prime|youtube\s*premium|zee5|sonyliv|jio\s*cinema|jiocinema|apple\s*tv|appletv|mxplayer|render\.com|github|notion|figma|openai|chatgpt|slack|\bzoom\b|google\s*(one|workspace)|microsoft\s*(365|office)|dropbox/i;
 
 // Returns true if DD/MM/YYYY dates form a strict regular interval
 // Periods: monthly (30d), bimonthly (60d), quarterly (91d), semi-annual (182d), annual (365d)
@@ -516,6 +611,9 @@ function detectRecurring(transactions) {
     const desc = getTxDesc(norm);
     const amt = parseAmount(getDebitAmt(norm) ?? getCreditAmt(norm));
     if (!desc || amt === null || amt <= 0) return false;
+    // Recurring payments/subscriptions/EMIs are debit outflows.
+    // Credits (refunds/reversals) can match the same merchant keywords, but should not count here.
+    if (!isDebit(norm)) return false;
     // Hard exclude one-off payment types
     if (NEVER_RECURRING_RE.test(desc)) return false;
     // Only include if it matches a known recurring obligation pattern
@@ -530,13 +628,18 @@ function detectRecurring(transactions) {
     const date = getTxDate(norm);
     const amount = parseAmount(getDebitAmt(norm) ?? getCreditAmt(norm));
 
+    // For EMIs/loans, keep amount-bucket grouping to avoid merging different loans.
+    // For subscriptions/bills, group by merchant name (amount may vary due to taxes/plan changes).
+    const loanLikeRe = /\bemi\b|\bloan\b|\bach\b|\bnach\b|\becs\b|direct\s*debit|\bautopay\b|\bauto[\s-]?debit\b/i;
+    const isLoanLike = loanLikeRe.test(rawDesc) || loanLikeRe.test(cleanedName);
+
     // Group by name + tight amount bucket so HDFC ₹25,708 and HDFC ₹11,322
     // are separate EMI groups (different loans), not merged
     const bucket = amount < 500   ? Math.round(amount / 50) * 50
                  : amount < 5000  ? Math.round(amount / 500) * 500
                  : amount < 50000 ? Math.round(amount / 2000) * 2000
                  :                  Math.round(amount / 10000) * 10000;
-    const groupKey = `${cleanedName}||${bucket}`;
+    const groupKey = isLoanLike ? `${cleanedName}||${bucket}` : `${cleanedName}`;
 
     if (!map[groupKey]) map[groupKey] = { rawDesc, cleanedName, txs: [] };
     map[groupKey].txs.push({ ...norm, _date: date, _amount: amount });
@@ -544,7 +647,13 @@ function detectRecurring(transactions) {
   });
 
   return Object.entries(map)
-    .filter(([_, { txs }]) => txs.length >= 2)
+    .filter(([_, { rawDesc, cleanedName, txs }]) => {
+      // Known subscription merchants show with 1+ debits (monthly statement may only have 1 charge).
+      // Everything else (EMIs, generic recurring) requires 2+ to confirm it truly repeats.
+      const isKnownSub = KNOWN_SUBSCRIPTION_MERCHANTS_RE.test(rawDesc) ||
+                         KNOWN_SUBSCRIPTION_MERCHANTS_RE.test(cleanedName);
+      return isKnownSub ? txs.length >= 1 : txs.length >= 2;
+    })
     .map(([_, { rawDesc, cleanedName, txs }]) => ({
       description: cleanedName,
       rawDescription: rawDesc,
@@ -553,8 +662,13 @@ function detectRecurring(transactions) {
       total: txs.reduce((sum, tx) => sum + (tx._amount || 0), 0),
       lastDate: getTxDate(txs[txs.length - 1]),
       details: txs
-        .map(tx => ({ date: tx._date || '', amount: typeof tx._amount === 'number' ? tx._amount : null, srcs: tx['__srcs'] || (tx['__src'] ? [tx['__src']] : []) }))
-        .filter(item => item.date || typeof item.amount === 'number'),
+        .map(tx => ({
+          date: tx._date || '',
+          amount: (typeof tx._amount === 'number' && isFinite(tx._amount)) ? tx._amount
+                  : (parseAmount(getDebitAmt(tx)) ?? parseAmount(getCreditAmt(tx)) ?? 0),
+          srcs: tx['__srcs'] || (tx['__src'] ? [tx['__src']] : [])
+        }))
+        .filter(item => item.date),
     }));
 }
 
@@ -785,7 +899,7 @@ const RecurringSection = ({ title, icon, items, multiFile, fileColorMap, fileInd
   );
 };
 
-const HeroState = () => (
+const HeroState = ({ onTrySample }) => (
   <div className="hero-state">
     <div className="hero-hints">
       <span>Detects subscriptions &amp; EMIs</span>
@@ -796,16 +910,28 @@ const HeroState = () => (
       <span className="hero-hint-sep">·</span>
       <span>100% private — runs in your browser</span>
     </div>
+    {typeof onTrySample === 'function' && (
+      <div className="hero-actions">
+        <button className="hero-sample-btn" onClick={onTrySample}>
+          Try with sample data
+        </button>
+      </div>
+    )}
   </div>
 );
 
-const Insights = ({ recurring, payments, userStats, hasData, loadedFiles, onExportCSV, onExportExcel, isPro, onUpgrade }) => {
+const Insights = ({ recurring, payments, userStats, hasData, loadedFiles, onExportCSV, onExportExcel, isPro, onUpgrade, monthlyRecurring, availableMonths, dateFilter, onDateFilterChange, onCustomKwChange }) => {
   const [openIndex, setOpenIndex] = useState(null);
   const [openSubIndex, setOpenSubIndex] = useState(null);
   const [openPaymentIndex, setOpenPaymentIndex] = useState(null);
   const [openPayeeIndex, setOpenPayeeIndex] = useState(null);
   const [categoryModal, setCategoryModal] = useState(null); // holds the selected category object
   const [clickedMonth, setClickedMonth] = useState(null); // holds the selected month data for modal
+  const [catRulesOpen, setCatRulesOpen] = useState(false); // category rules/tags modal
+  const [catAddState, setCatAddState]   = useState(null);  // { catName, value } — inline add input
+  const [localCustomKw, setLocalCustomKw] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('acc_cat_custom') || '{}'); } catch { return {}; }
+  });
   if (!hasData) return null;
 
   const multiFile    = loadedFiles.length > 1;
@@ -818,30 +944,7 @@ const Insights = ({ recurring, payments, userStats, hasData, loadedFiles, onExpo
   const subTotal        = subscriptions.reduce((s, r) => s + r.total, 0);
   const otherTotal      = otherRecurring.reduce((s, r) => s + r.total, 0);
 
-  // Monthly recurring spend — built from all recurring txs grouped by YYYY-MM
-  const recurringMonthMap = {};
-  [...subscriptions, ...otherRecurring].forEach(r => {
-    (r.details || []).forEach(tx => {
-      const d = tx.date || '';
-      // date is DD/MM/YYYY
-      const parts = d.split('/');
-      if (parts.length < 3) return;
-      const key = `${parts[2]}-${parts[1]}`; // YYYY-MM
-      if (!recurringMonthMap[key]) recurringMonthMap[key] = { total: 0, txs: [] };
-      recurringMonthMap[key].total += (tx.amount || 0);
-      recurringMonthMap[key].txs.push({ desc: r.description, amount: tx.amount || 0, date: tx.date || '' });
-    });
-  });
-  const monthlyRecurring = Object.entries(recurringMonthMap)
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([key, { total, txs }]) => {
-      const [yr, mo] = key.split('-');
-      const label = new Date(Number(yr), Number(mo) - 1, 1).toLocaleString('default', { month: 'short', year: '2-digit' });
-      // Sort txs by amount desc for tooltip
-      const sortedTxs = [...txs].sort((a, b) => b.amount - a.amount);
-      return { key, label, total, txs: sortedTxs };
-    });
-  const maxRecurringMonth = Math.max(...monthlyRecurring.map(m => m.total), 1);
+  const maxRecurringMonth = Math.max(...(monthlyRecurring || []).map(m => m.total), 1);
 
   const maxMerchant = userStats.topMerchants?.[0]?.total || 1;
   const maxMonth = Math.max(...(userStats.monthlySpend?.map(m => m.total) || [1]), 1);
@@ -849,12 +952,44 @@ const Insights = ({ recurring, payments, userStats, hasData, loadedFiles, onExpo
   return (
     <div className="insights-wrap">
 
-      {/* Date range banner */}
+      {/* Date range banner + month filter */}
       {userStats.dateRange && (
         <div className="date-range-bar">
           <span className="date-range-label">Statement period</span>
           <span className="date-range-value">{userStats.dateRange.from} &ndash; {userStats.dateRange.to}</span>
           <span className="date-range-days">{userStats.dateRange.days} days</span>
+        </div>
+      )}
+      {availableMonths && availableMonths.length > 1 && (
+        <div className="month-filter-bar">
+          <span className="month-filter-label">Filter by month</span>
+          <div className="month-filter-pills">
+            <button
+              className={`month-pill${!dateFilter ? ' month-pill-active' : ''}`}
+              onClick={() => onDateFilterChange(null)}
+            >All</button>
+            {availableMonths.map(key => {
+              const [yr, mo] = key.split('-');
+              const label = new Date(Number(yr), Number(mo) - 1, 1)
+                .toLocaleString('default', { month: 'short', year: '2-digit' });
+              const isActive = dateFilter?.key === key;
+              return (
+                <button
+                  key={key}
+                  className={`month-pill${isActive ? ' month-pill-active' : ''}`}
+                  onClick={() => {
+                    if (isActive) {
+                      onDateFilterChange(null);
+                    } else {
+                      const from = new Date(Number(yr), Number(mo) - 1, 1);
+                      const to   = new Date(Number(yr), Number(mo), 0); // last day
+                      onDateFilterChange({ key, label, from, to });
+                    }
+                  }}
+                >{label}</button>
+              );
+            })}
+          </div>
         </div>
       )}
 
@@ -892,6 +1027,10 @@ const Insights = ({ recurring, payments, userStats, hasData, loadedFiles, onExpo
             <span>Spending by category</span>
             <span className="count-badge">{userStats.categorySpend.length}</span>
             <span className="section-hint">Click any row for details</span>
+            <button className="cat-rules-btn" onClick={() => setCatRulesOpen(true)} title="Edit category keywords">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+              Edit categories
+            </button>
           </div>
           <div className="category-grid">
             {userStats.categorySpend.map((c, i) => (
@@ -926,6 +1065,94 @@ const Insights = ({ recurring, payments, userStats, hasData, loadedFiles, onExpo
           fileIndexMap={fileIndexMap}
         />
       )}
+
+      {/* Category Rules / How-we-categorize modal */}
+      {catRulesOpen && (() => {
+        const saveKw = (updated) => {
+          setLocalCustomKw(updated);
+          onCustomKwChange(updated);
+        };
+        const removeKw = (catName, kw) => {
+          const prev = localCustomKw[catName] || [];
+          const next = prev.filter(k => k !== kw);
+          const updated = { ...localCustomKw, [catName]: next };
+          saveKw(updated);
+        };
+        const addKw = (catName, value) => {
+          const trimmed = value.trim();
+          if (!trimmed) return;
+          const prev = localCustomKw[catName] || [];
+          if (prev.includes(trimmed)) return;
+          const updated = { ...localCustomKw, [catName]: [...prev, trimmed] };
+          saveKw(updated);
+          setCatAddState(null);
+        };
+        return (
+          <div className="modal-backdrop" onClick={() => setCatRulesOpen(false)}>
+            <div className="modal-panel cat-rules-modal" onClick={e => e.stopPropagation()}>
+              <div className="modal-header">
+                <span className="modal-title">Edit category keywords</span>
+                <button className="modal-close" onClick={() => setCatRulesOpen(false)}>×</button>
+              </div>
+              <div className="modal-body cat-rules-body">
+                <p className="cat-rules-intro">Built-in keywords (grey) match transactions automatically. Add your own keywords (coloured) to override categorization — they take priority.</p>
+                <div className="cat-rules-grid">
+                  {CATEGORY_RULES_DISPLAY.map(cat => {
+                    const userKws = localCustomKw[cat.name] || [];
+                    const isAdding = catAddState?.catName === cat.name;
+                    return (
+                      <div key={cat.name} className="cat-rules-row">
+                        <div className="cat-rules-name">
+                          <span className="cat-rules-emoji">{cat.emoji}</span>
+                          <span style={{ color: cat.color, fontWeight: 700 }}>{cat.name}</span>
+                        </div>
+                        <div className="cat-rules-keywords">
+                          {/* Built-in keywords — read-only */}
+                          {cat.keywords.map(kw => (
+                            <span key={kw} className="cat-rules-tag cat-rules-tag-builtin">{kw}</span>
+                          ))}
+                          {/* User custom keywords — removable */}
+                          {userKws.map(kw => (
+                            <span key={kw} className="cat-rules-tag cat-rules-tag-custom" style={{ borderColor: cat.color, background: cat.color + '18', color: cat.color }}>
+                              {kw}
+                              <button className="cat-kw-remove" onClick={() => removeKw(cat.name, kw)} title="Remove">×</button>
+                            </span>
+                          ))}
+                          {/* Inline add input */}
+                          {isAdding ? (
+                            <span className="cat-kw-add-wrap">
+                              <input
+                                className="cat-kw-input"
+                                autoFocus
+                                placeholder="Type keyword…"
+                                value={catAddState.value}
+                                onChange={e => setCatAddState({ catName: cat.name, value: e.target.value })}
+                                onKeyDown={e => {
+                                  if (e.key === 'Enter') addKw(cat.name, catAddState.value);
+                                  if (e.key === 'Escape') setCatAddState(null);
+                                }}
+                              />
+                              <button className="cat-kw-add-confirm" style={{ background: cat.color }} onClick={() => addKw(cat.name, catAddState.value)}>Add</button>
+                              <button className="cat-kw-add-cancel" onClick={() => setCatAddState(null)}>✕</button>
+                            </span>
+                          ) : (
+                            <button
+                              className="cat-kw-add-btn"
+                              style={{ borderColor: cat.color + '88', color: cat.color }}
+                              onClick={() => setCatAddState({ catName: cat.name, value: '' })}
+                              title={`Add keyword to ${cat.name}`}
+                            >+ Add</button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Subscriptions & EMIs */}
       {subscriptions.length > 0 && (
@@ -962,25 +1189,43 @@ const Insights = ({ recurring, payments, userStats, hasData, loadedFiles, onExpo
             <span>Monthly Recurring Spend</span>
             <span className="section-hint">EMIs + subscriptions + recurring per month</span>
           </div>
-          <div className="monthly-recurring-grid">
-            {monthlyRecurring.map((m, i) => (
-              <div
-                key={i}
-                className={`monthly-rec-cell${clickedMonth?.key === m.key ? ' monthly-rec-hovered' : ''}`}
-                onClick={() => setClickedMonth(m)}
-                title="Click to see all transactions"
-              >
-                <div className="monthly-rec-bar-wrap">
-                  <div
-                    className="monthly-rec-bar"
-                    style={{ height: `${Math.round((m.total / maxRecurringMonth) * 100)}%` }}
-                  />
-                </div>
-                <div className="monthly-rec-label">{m.label}</div>
-                <div className="monthly-rec-value">{fmt(m.total)}</div>
+          {monthlyRecurring.length === 1 ? (
+            // Single month — horizontal summary looks better than a lonely bar
+            <div
+              className={`monthly-rec-single${clickedMonth?.key === monthlyRecurring[0].key ? ' monthly-rec-hovered' : ''}`}
+              onClick={() => setClickedMonth(monthlyRecurring[0])}
+              title="Click to see all transactions"
+            >
+              <div className="monthly-rec-single-left">
+                <div className="monthly-rec-single-month">{monthlyRecurring[0].label}</div>
+                <div className="monthly-rec-single-hint">{monthlyRecurring[0].txs.length} transaction{monthlyRecurring[0].txs.length !== 1 ? 's' : ''} · click for details</div>
               </div>
-            ))}
-          </div>
+              <div className="monthly-rec-single-bar-wrap">
+                <div className="monthly-rec-single-bar" />
+              </div>
+              <div className="monthly-rec-single-total">{fmt(monthlyRecurring[0].total)}</div>
+            </div>
+          ) : (
+            <div className="monthly-recurring-grid">
+              {monthlyRecurring.map((m, i) => (
+                <div
+                  key={i}
+                  className={`monthly-rec-cell${clickedMonth?.key === m.key ? ' monthly-rec-hovered' : ''}`}
+                  onClick={() => setClickedMonth(m)}
+                  title="Click to see all transactions"
+                >
+                  <div className="monthly-rec-bar-wrap">
+                    <div
+                      className="monthly-rec-bar"
+                      style={{ height: `${Math.round((m.total / maxRecurringMonth) * 100)}%` }}
+                    />
+                  </div>
+                  <div className="monthly-rec-label">{m.label}</div>
+                  <div className="monthly-rec-value">{fmt(m.total)}</div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -1215,8 +1460,41 @@ const StatementUploader = ({ isPro = false, onUpgrade }) => {
   const [error, setError]             = useState('');
   const [historyOpen, setHistoryOpen] = useState(false);
   const [sessions, setSessions]       = useState([]);
+  const [dateFilter, setDateFilter]   = useState(null); // null=all | { key, label, from, to }
+  const [customKwVersion, setCustomKwVersion] = useState(0); // bumped on every keyword edit
   const sessionIdRef                  = useRef(null);
   const loadingFromHistoryRef         = useRef(false);
+
+  const handleCustomKwChange = useCallback((newKws) => {
+    _saveCustomKeywords(newKws);
+    setCustomKwVersion(v => v + 1);
+  }, []);
+
+  const loadSampleData = useCallback(async () => {
+    try {
+      setError('');
+      const resp = await fetch('/sample-statement.csv', { cache: 'no-store' });
+      if (!resp.ok) throw new Error(`Could not load sample data (${resp.status})`);
+      const text = await resp.text();
+      const rows = parseCSV(text).map(r => ({ ...r, __src: 'Sample' }));
+      setLoadedFiles([{ id: 'sample', name: 'Sample Statement (Demo)', data: rows }]);
+      setDateFilter(null);
+    } catch (e) {
+      setError(e?.message || 'Could not load sample data');
+    }
+  }, []);
+
+  // Deep-link support: /?sample=1 auto-loads the sample statement
+  useEffect(() => {
+    if (loadedFiles.length > 0) return;
+    const params = new URLSearchParams(window.location.search || '');
+    if (params.get('sample') !== '1') return;
+    loadSampleData();
+    params.delete('sample');
+    const newSearch = params.toString();
+    const newUrl = `${window.location.pathname}${newSearch ? `?${newSearch}` : ''}${window.location.hash || ''}`;
+    window.history.replaceState({}, '', newUrl);
+  }, [loadedFiles.length, loadSampleData]);
 
   // Load existing sessions from IndexedDB on first render
   useEffect(() => {
@@ -1272,10 +1550,77 @@ const StatementUploader = ({ isPro = false, onUpgrade }) => {
     const flat = loadedFiles.flatMap(f => f.data);
     return loadedFiles.length > 1 ? deduplicateData(flat) : flat;
   }, [loadedFiles]);
+
+  // All months present in the full dataset — used to render filter pills
+  const availableMonths = useMemo(() => {
+    const set = new Set();
+    allData.forEach(tx => {
+      const norm = buildNorm(tx);
+      const dateStr = getTxDate(norm);
+      if (!dateStr) return;
+      const parts = dateStr.replace(/-/g, '/').split('/');
+      if (parts.length < 3) return;
+      const yr = parts[2].length === 2 ? '20' + parts[2] : parts[2];
+      set.add(`${yr}-${parts[1].padStart(2, '0')}`);
+    });
+    return [...set].sort();
+  }, [allData]);
+
+  // Subset of allData matching the active date filter
+  const filteredData = useMemo(() => {
+    if (!dateFilter) return allData;
+    return allData.filter(tx => {
+      const norm = buildNorm(tx);
+      const dateStr = getTxDate(norm);
+      if (!dateStr) return true;
+      const parts = dateStr.replace(/-/g, '/').split('/');
+      if (parts.length < 3) return true;
+      const yr = parts[2].length === 2 ? '20' + parts[2] : parts[2];
+      const txDate = new Date(Number(yr), Number(parts[1]) - 1, Number(parts[0]));
+      return txDate >= dateFilter.from && txDate <= dateFilter.to;
+    });
+  }, [allData, dateFilter]);
+
   const hasData   = loadedFiles.length > 0;
-  const recurring = useMemo(() => detectRecurring(allData), [allData]);
-  const payments  = useMemo(() => getPayments(allData),     [allData]);
-  const userStats = useMemo(() => getUserStats(allData),    [allData]);
+  const recurring = useMemo(() => detectRecurring(filteredData), [filteredData]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const payments  = useMemo(() => getPayments(filteredData),     [filteredData, customKwVersion]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const userStats = useMemo(() => getUserStats(filteredData),    [filteredData, customKwVersion]);
+
+  // Compute monthly recurring spend directly from raw allData
+  // (more reliable than going through r.details which can lose amounts)
+  const monthlyRecurring = useMemo(() => {
+    const map = {};
+    filteredData.forEach(tx => {
+      const norm = buildNorm(tx);
+      const desc = getTxDesc(norm);
+      if (!desc) return;
+      if (!isDebit(norm)) return;
+      if (NEVER_RECURRING_RE.test(desc)) return;
+      if (!KNOWN_RECURRING_RE.test(desc)) return;
+      const amount = parseAmount(getDebitAmt(norm) ?? getCreditAmt(norm));
+      if (!amount || amount <= 0) return;
+      const date = getTxDate(norm);
+      if (!date) return;
+      const parts = date.replace(/-/g, '/').split('/');
+      if (parts.length < 3) return;
+      const yr = parts[2].length === 2 ? '20' + parts[2] : parts[2];
+      const key = `${yr}-${parts[1].padStart(2, '0')}`;
+      const cleaned = cleanMerchantName(desc);
+      if (!map[key]) map[key] = { total: 0, txs: [] };
+      map[key].total += amount;
+      map[key].txs.push({ desc: cleaned, amount, date });
+    });
+    return Object.entries(map)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([key, { total, txs }]) => {
+        const [yr, mo] = key.split('-');
+        const label = new Date(Number(yr), Number(mo) - 1, 1)
+          .toLocaleString('default', { month: 'short', year: '2-digit' });
+        return { key, label, total, txs: [...txs].sort((a, b) => b.amount - a.amount) };
+      });
+  }, [filteredData]);
 
   function getPayments(data) {
     const debits = data
@@ -1595,7 +1940,7 @@ const StatementUploader = ({ isPro = false, onUpgrade }) => {
     <>
     <Card>
       <h2 className="upload-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <img src="/logo.svg" alt="" style={{ width: 22, height: 22, borderRadius: 5 }} /> Upload to SpendLens
+        <img src="/logo.svg" alt="" style={{ width: 22, height: 22, borderRadius: 5 }} /> Upload to CashScope
         <span className="badge-muted">CSV or Excel • multiple accounts → combined dashboard</span>
       </h2>
 
@@ -1626,7 +1971,7 @@ const StatementUploader = ({ isPro = false, onUpgrade }) => {
           </span>
           <div>
             <div className="trust-title">No Uploads</div>
-            <div className="trust-desc">Zero server contact, ever</div>
+            <div className="trust-desc">We never upload your statement</div>
           </div>
         </div>
       </div>
@@ -1686,8 +2031,8 @@ const StatementUploader = ({ isPro = false, onUpgrade }) => {
           <FaExclamationCircle color="#d32f2f" /> {error}
         </div>
       )}
-      {!hasData && <HeroState />}
-      <Insights recurring={recurring} payments={payments} userStats={userStats} hasData={hasData} loadedFiles={loadedFiles} onExportCSV={exportCSV} onExportExcel={exportExcel} isPro={isPro} onUpgrade={onUpgrade} />
+      {!hasData && <HeroState onTrySample={loadSampleData} />}
+      <Insights recurring={recurring} payments={payments} userStats={userStats} hasData={hasData} loadedFiles={loadedFiles} onExportCSV={exportCSV} onExportExcel={exportExcel} isPro={isPro} onUpgrade={onUpgrade} monthlyRecurring={monthlyRecurring} availableMonths={availableMonths} dateFilter={dateFilter} onDateFilterChange={setDateFilter} onCustomKwChange={handleCustomKwChange} />
     </Card>
 
     {historyOpen && (

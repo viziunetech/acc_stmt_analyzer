@@ -1,7 +1,7 @@
 {
-  "name": "spendlens-api",
+  "name": "cashscope-api",
   "version": "1.0.0",
-  "description": "SpendLens license key backend",
+  "description": "CashScope license key backend",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

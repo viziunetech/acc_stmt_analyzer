@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: spendlens
+    name: cashscope
     runtime: node
     buildCommand: npm install && npm run build && cd server && npm install
     startCommand: node server/server.js

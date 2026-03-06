@@ -1,10 +1,10 @@
 /**
- * SpendLens — IndexedDB history store
+ * CashScope — IndexedDB history store
  * Saves/restores uploaded statement sessions locally in the browser.
  * Uses IndexedDB (not localStorage) because transaction data can be several MB.
  */
 
-const DB_NAME    = 'spendlens-history';
+const DB_NAME    = 'cashscope-history';
 const DB_VERSION = 1;
 const STORE      = 'sessions';
 const MAX        = 10; // keep at most 10 sessions

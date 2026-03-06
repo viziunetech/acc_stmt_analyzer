@@ -113,7 +113,7 @@ const BuyTab = ({ onSuccess, onError }) => {
         amount:      order.amount,
         currency:    order.currency,
         order_id:    order.orderId,
-        name:        'SpendLens',
+        name:        'CashScope',
         description: 'Lifetime Pro License',
         image:       '/logo.svg',
         prefill:     { email },
@@ -289,7 +289,7 @@ const UpgradeModal = ({ onClose, onActivated }) => {
         <div className="modal-header upgrade-modal-header">
           <span className="modal-title">
             <img src="/logo.svg" alt="" style={{ width: 22, height: 22, borderRadius: 5 }} />
-            Upgrade to <span style={{ color: '#4e54c8' }}>SpendLens Pro</span>
+            Upgrade to <span style={{ color: '#4e54c8' }}>CashScope Pro</span>
           </span>
           <button className="modal-close" onClick={onClose} aria-label="Close">&times;</button>
         </div>
