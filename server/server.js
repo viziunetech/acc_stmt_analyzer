@@ -4,8 +4,8 @@ const express    = require('express');
 const cors       = require('cors');
 const crypto     = require('crypto');
 const Razorpay   = require('razorpay');
-const nodemailer = require('nodemailer');
-const { Redis }  = require('@upstash/redis');
+const { Resend }  = require('resend');
+const { Redis }   = require('@upstash/redis');
 const { mountSeo } = require('./seoPages');
 
 const app  = express();
@@ -46,19 +46,12 @@ const razorpay = razorpayConfigured
 
 if (!razorpayConfigured) console.warn('⚠️  Razorpay keys not configured — /create-order will return 503');
 
-// ── Mailer ───────────────────────────────────────────────────────────────
-const smtpConfigured = !!(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
+// ── Mailer (Resend) ─────────────────────────────────────────────────────
+const resendConfigured = !!(process.env.RESEND_API_KEY && !process.env.RESEND_API_KEY.includes('REPLACE'));
+const resend = resendConfigured ? new Resend(process.env.RESEND_API_KEY) : null;
 
-const transporter = smtpConfigured
-  ? nodemailer.createTransport({
-      host:   process.env.SMTP_HOST,
-      port:   Number(process.env.SMTP_PORT) || 587,
-      secure: false,
-      auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
-    })
-  : null;
-
-if (!smtpConfigured) console.warn('⚠️  SMTP not configured — license keys will NOT be emailed');
+if (!resendConfigured) console.warn('⚠️  Resend API key not configured — license keys will NOT be emailed');
+else console.log('📧 Resend mailer ready');
 
 // ── Middleware ───────────────────────────────────────────────────────────
 app.use(cors({ origin: process.env.FRONTEND_URL || '*' }));
@@ -77,14 +70,16 @@ function generateLicenseKey(email, orderId) {
   return [raw.slice(0,4), raw.slice(4,8), raw.slice(8,12), raw.slice(12,16)].join('-');
 }
 
-async function sendLicenseEmail(email, key) {
-  if (!smtpConfigured) {
-    console.log(`📧 Email skipped (SMTP not configured) — key for ${email}: ${key}`);
+async function sendLicenseEmail(email, key, orderId = '') {
+  if (!resendConfigured) {
+    console.log(`📧 Email skipped (Resend not configured) — key for ${email}: ${key}`);
     return;
   }
-  const appUrl = process.env.FRONTEND_URL || 'https://cashscope.in';
-  await transporter.sendMail({
-    from:    process.env.EMAIL_FROM,
+  const appUrl  = process.env.SITE_URL || process.env.FRONTEND_URL || 'https://cashscope.app';
+  const from    = process.env.EMAIL_FROM   || 'CashScope <noreply@cashscope.app>';
+  const issuedOn = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  await resend.emails.send({
+    from,
     to:      email,
     subject: '🔑 Your CashScope Pro License Key',
     html: `
@@ -99,15 +94,36 @@ async function sendLicenseEmail(email, key) {
           To activate, open <a href="${appUrl}" style="color:#4e54c8">${appUrl}</a>,
           click <strong>Activate Pro</strong> and paste this key.
         </p>
-        <p style="font-size:0.82rem;color:#9ca3af;margin-top:24px">
+
+        <table style="width:100%;border-collapse:collapse;margin-top:20px;font-size:0.82rem;color:#374151">
+          <tr style="border-top:1px solid #e5e7eb">
+            <td style="padding:8px 4px;color:#9ca3af">Order ID</td>
+            <td style="padding:8px 4px;font-weight:600">${orderId || '—'}</td>
+          </tr>
+          <tr style="border-top:1px solid #e5e7eb">
+            <td style="padding:8px 4px;color:#9ca3af">Issued to</td>
+            <td style="padding:8px 4px;font-weight:600">${email}</td>
+          </tr>
+          <tr style="border-top:1px solid #e5e7eb">
+            <td style="padding:8px 4px;color:#9ca3af">Date</td>
+            <td style="padding:8px 4px">${issuedOn}</td>
+          </tr>
+          <tr style="border-top:1px solid #e5e7eb">
+            <td style="padding:8px 4px;color:#9ca3af">Plan</td>
+            <td style="padding:8px 4px">Lifetime Pro</td>
+          </tr>
+        </table>
+
+        <p style="font-size:0.82rem;color:#9ca3af;margin-top:20px">
           Keep this key safe — it works on any browser or device.
-          If you lose it, reply to this email with your order details.
+          Lost it? Reply to this email quoting your Order ID and we'll resend it.
         </p>
         <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0"/>
-        <p style="font-size:0.78rem;color:#9ca3af">CashScope · Your spending, crystal clear</p>
+        <p style="font-size:0.78rem;color:#9ca3af">CashScope · Your spending, crystal clear · <a href="${appUrl}" style="color:#9ca3af">${appUrl}</a></p>
       </div>
     `,
   });
+  console.log(`✅ License email sent via Resend to ${email}`);
 }
 
 // ── Routes ───────────────────────────────────────────────────────────────
@@ -186,7 +202,7 @@ app.post('/api/webhook', async (req, res) => {
     await setLicense(key, { email, orderId, createdAt: new Date().toISOString(), valid: true });
     console.log(`✅ License issued: ${key} → ${email}`);
 
-    sendLicenseEmail(email, key).catch(err => console.error('Email error:', err));
+    sendLicenseEmail(email, key, orderId).catch(err => console.error('Email error:', err));
   }
 
   res.json({ ok: true });
@@ -227,7 +243,7 @@ app.post('/api/verify-payment', async (req, res) => {
     await setLicense(key, { email, orderId: razorpay_order_id, createdAt: new Date().toISOString(), valid: true });
     console.log(`✅ License issued (verify): ${key} → ${email}`);
 
-    sendLicenseEmail(email, key).catch(err => console.error('Email error:', err));
+    sendLicenseEmail(email, key, razorpay_order_id).catch(err => console.error('Email error:', err));
 
     res.json({ ok: true, key });
   } catch (err) {
