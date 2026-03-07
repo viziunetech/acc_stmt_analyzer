@@ -73,6 +73,22 @@ function renderPage({ siteUrl, path, title, description, h1, subtitle, bullets =
     `
     : '';
 
+  const jsonld = {
+    '@context': 'https://schema.org',
+    '@type': mergedFaqs.length ? 'FAQPage' : 'WebPage',
+    name: title,
+    description,
+    url: canonical,
+  };
+  if (mergedFaqs.length) {
+    jsonld.mainEntity = mergedFaqs.map(f => ({
+      '@type': 'Question',
+      name: f.q,
+      acceptedAnswer: { '@type': 'Answer', text: f.a },
+    }));
+  }
+  const jsonldStr = JSON.stringify(jsonld);
+
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -81,6 +97,7 @@ function renderPage({ siteUrl, path, title, description, h1, subtitle, bullets =
   <title>${escapeHtml(title)}</title>
   <meta name="description" content="${escapeHtml(description)}" />
   <link rel="canonical" href="${escapeHtml(canonical)}" />
+  <script type="application/ld+json">${jsonldStr}</script>
 
   <meta property="og:type" content="website" />
   <meta property="og:title" content="${escapeHtml(title)}" />
@@ -379,7 +396,8 @@ function mountSeo(app) {
   // sitemap.xml
   app.get('/sitemap.xml', (req, res) => {
     const siteUrl = getSiteUrl(req);
-    const urls = PAGES.map(p => `
+    const rootEntry = `\n  <url>\n    <loc>${escapeHtml(siteUrl)}/</loc>\n  </url>`;
+    const urls = rootEntry + PAGES.map(p => `
   <url>
     <loc>${escapeHtml(siteUrl + p.path)}</loc>
   </url>`).join('');
