@@ -5,11 +5,11 @@ const IS_DEV = import.meta.env.DEV;
 
 const PRICE    = '₹299';
 const FEATURES = [
-  'Upload multiple files — combine statements from multiple accounts',
-  'Full category drill-down — click any category to see every transaction',
-  'Session history — saved locally, reload without re-uploading',
-  'Export to CSV & Excel — 4-sheet report download',
-  'Unlimited date range — no statement date restrictions',
+  'Upload multiple files: combine statements from multiple accounts',
+  'Full category drill-down: click any category to see every transaction',
+  'Session history: saved locally, reload without re-uploading',
+  'Export to CSV & Excel: 4-sheet report download',
+  'Unlimited date range: no statement date restrictions',
 ];
 
 // Loads Razorpay checkout script once
@@ -302,7 +302,7 @@ const UpgradeModal = ({ onClose, onActivated }) => {
             {/* Tabs */}
             <div className="upgrade-tabs">
               <button className={`upgrade-tab${tab === 'buy' ? ' active' : ''}`} onClick={() => { setTab('buy'); setError(''); }}>
-                Buy — {PRICE} lifetime
+                Buy {PRICE} lifetime
               </button>
               <button className={`upgrade-tab${tab === 'activate' ? ' active' : ''}`} onClick={() => { setTab('activate'); setError(''); }}>
                 Activate key

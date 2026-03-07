@@ -19,16 +19,16 @@ function renderPage({ siteUrl, path, title, description, h1, subtitle, bullets =
 
   const defaultFaqs = [
     {
-      q: 'Do you upload my bank statement?'
-      , a: 'No. Your statement is processed locally in your browser. CashScope does not receive or store your statement data.'
+      q: 'Do you upload my bank statement?',
+      a: 'No. Your statement is processed locally in your browser. CashScope does not receive or store your statement data.',
     },
     {
-      q: 'What formats are supported?'
-      , a: 'CSV and Excel (XLSX/XLS) statements are supported.'
+      q: 'What formats are supported?',
+      a: 'CSV and Excel (XLSX/XLS) statements are supported.',
     },
     {
-      q: 'Is this financial advice?'
-      , a: 'No. CashScope is a data analysis tool to help you review transactions and recurring spend.'
+      q: 'Is this financial advice?',
+      a: 'No. CashScope is a data analysis tool to help you review transactions and recurring spend.',
     },
   ];
 
@@ -162,11 +162,80 @@ function renderPage({ siteUrl, path, title, description, h1, subtitle, bullets =
 
 const PAGES = [
   {
+    path: '/pricing',
+    title: 'CashScope Pricing - One-time Pro License',
+    description: 'CashScope Pro is a one-time payment for lifetime access. Unlock exports, history, and multi-account uploads.',
+    h1: 'Pricing',
+    subtitle: 'One-time payment. Lifetime access. No subscription.',
+    bullets: ['₹299 one-time (lifetime)', 'Exports + history (Pro)', 'Multi-account uploads (Pro)'],
+    sections: [
+      { title: 'Free', items: ['Local statement analysis in your browser', 'Category breakdown', 'Recurring/EMI detection', 'Clickable drilldowns'] },
+      { title: 'Pro (₹299)', items: ['Export to CSV & Excel', 'Upload multiple statements', 'Save sessions in History', 'Unlimited date range'] },
+    ],
+    faqs: [
+      { q: 'Is it a subscription?', a: 'No. CashScope Pro is a one-time purchase for lifetime access.' },
+      { q: 'How do I get my license key?', a: 'After payment, your license key is issued and emailed to you.' },
+    ],
+  },
+  {
+    path: '/privacy-policy',
+    title: 'CashScope Privacy Policy',
+    description: 'Privacy-first bank statement analysis. CashScope is designed for local processing in your browser.',
+    h1: 'Privacy Policy',
+    subtitle: 'CashScope is designed for privacy-first, local processing. This page explains what we collect and why.',
+    sections: [
+      { title: 'Statement data', text: 'CashScope processes statement files locally in your browser as part of the analysis workflow. We do not intentionally collect your statement contents on our servers.' },
+      { title: 'Data you provide', items: ['Email address (for purchases, license delivery, and support)', 'Payment identifiers needed to verify purchases', 'Support messages you submit via the contact form'] },
+      { title: 'Third parties', items: ['Razorpay (payments)', 'Resend (email delivery)', 'Upstash Redis (license storage, if configured)'] },
+      { title: 'Contact', text: 'For privacy questions, please contact support via the Contact page.' },
+    ],
+    faqs: [],
+  },
+  {
+    path: '/terms',
+    title: 'CashScope Terms & Conditions',
+    description: 'Terms and conditions for using CashScope and purchasing a CashScope Pro license.',
+    h1: 'Terms & Conditions',
+    subtitle: 'By using CashScope you agree to these terms. CashScope is a data analysis tool, not financial advice.',
+    sections: [
+      { title: 'Service', items: ['CashScope is an analysis tool and not financial, tax, or legal advice.', 'You are responsible for verifying outputs and decisions.'] },
+      { title: 'Pro license', items: ['License keys should be kept secure.', 'If you need team/bulk licensing, contact support.'] },
+      { title: 'Availability', text: 'We aim to keep CashScope available, but do not guarantee uninterrupted operation. Features may change over time.' },
+      { title: 'Contact', text: 'Questions about these terms? Contact support via the Contact page.' },
+    ],
+    faqs: [],
+  },
+  {
+    path: '/refund-policy',
+    title: 'CashScope Refund Policy',
+    description: 'Refund policy for CashScope Pro one-time purchases.',
+    h1: 'Refund Policy',
+    subtitle: 'If something goes wrong with your purchase or access to Pro, contact support and we will help.',
+    sections: [
+      { title: 'Eligibility', items: ['Duplicate charges', 'Payment succeeded but license delivery failed and cannot be resolved', 'Pro does not work on supported browsers after reasonable troubleshooting'] },
+      { title: 'How to request', text: 'Contact support with your purchase email and Order ID (or payment ID). We may ask for additional details to locate the transaction.' },
+      { title: 'Contact', text: 'Refund requests are handled by support via the Contact page.' },
+    ],
+    faqs: [],
+  },
+  {
+    path: '/contact',
+    title: 'Contact CashScope',
+    description: 'Contact CashScope support for billing, licensing, and product questions.',
+    h1: 'Contact',
+    subtitle: 'For billing, licensing, or product questions, reach out via the in-app contact form.',
+    sections: [
+      { title: 'Fastest way', text: 'Open the app and use the Contact form so we can respond to you by email.' },
+      { title: 'Include', items: ['Your email address', 'Order ID / payment ID (for billing/license issues)', 'A short description of the issue'] },
+    ],
+    faqs: [],
+  },
+  {
     path: '/bank-statement-analyzer',
-    title: 'CashScope — Bank Statement Analyzer (Private, Local Processing)',
+    title: 'CashScope - Bank Statement Analyzer (Private, Local Processing)',
     description: 'Analyze a bank statement CSV/XLSX privately in your browser. Categorize spend, find subscriptions/recurring payments and EMIs, and export reports with CashScope Pro.',
     h1: 'Bank statement analyzer (private, local processing)',
-    subtitle: 'Upload a CSV/XLSX statement and get instant spend categories, top merchants, monthly spend, and recurring/EMI detection — without uploading your data.',
+    subtitle: 'Upload a CSV/XLSX statement and get instant spend categories, top merchants, monthly spend, and recurring/EMI detection without uploading your data.',
     bullets: [
       'Instant spending by category + top merchants',
       'Find subscriptions, recurring payments, and EMIs',
@@ -184,10 +253,10 @@ const PAGES = [
   },
   {
     path: '/recurring-payments-tracker',
-    title: 'CashScope — Recurring Payments Tracker (Subscriptions & Bills)',
+    title: 'CashScope - Recurring Payments Tracker (Subscriptions & Bills)',
     description: 'Find recurring payments and subscriptions from your bank statement. Spot hidden charges and understand monthly recurring spend with CashScope.',
     h1: 'Recurring payments tracker from your bank statement',
-    subtitle: 'Identify subscriptions and repeating debits from statement descriptions—then review month-by-month totals.',
+    subtitle: 'Identify subscriptions and repeating debits from statement descriptions. Then review month-by-month totals.',
     bullets: ['Detect recurring subscriptions and auto-debits', 'See monthly recurring totals', 'Open details and review transactions'],
     sections: [
       { title: 'Common recurring items', items: ['Streaming subscriptions', 'Auto-debit mandates (NACH/ECS)', 'Bills and utilities', 'Memberships and software'] },
@@ -199,7 +268,7 @@ const PAGES = [
   },
   {
     path: '/subscription-tracker',
-    title: 'CashScope — Subscription Tracker (From Bank Statement)',
+    title: 'CashScope - Subscription Tracker (From Bank Statement)',
     description: 'Track subscriptions from your bank statement and reduce unwanted recurring charges. CashScope runs locally for privacy.',
     h1: 'Subscription tracker (no bank login needed)',
     subtitle: 'Upload your statement and review subscription-like charges, totals, and transaction details.',
@@ -211,7 +280,7 @@ const PAGES = [
   },
   {
     path: '/emi-tracker',
-    title: 'CashScope — EMI Tracker (Loans & Direct Debit)',
+    title: 'CashScope - EMI Tracker (Loans & Direct Debit)',
     description: 'Track EMIs and loan repayments from statement patterns like ACH/NACH/DIRECT DEBIT. Review totals and transaction references with CashScope.',
     h1: 'EMI tracker from statement (ACH/NACH/DIRECT DEBIT)',
     subtitle: 'Group EMI/loan debits and review reference numbers when present in the narration.',
@@ -223,7 +292,7 @@ const PAGES = [
   },
   {
     path: '/categorize-bank-transactions',
-    title: 'CashScope — Categorize Bank Transactions Automatically',
+    title: 'CashScope - Categorize Bank Transactions Automatically',
     description: 'Auto-categorize bank statement transactions into groceries, food, travel, utilities, EMIs and more. Edit keywords to fit your statement style.',
     h1: 'Automatically categorize bank transactions',
     subtitle: 'CashScope matches transaction descriptions to keywords and categories. You can also edit and add your own keywords.',
@@ -235,10 +304,10 @@ const PAGES = [
   },
   {
     path: '/expense-report-from-bank-statement',
-    title: 'CashScope — Expense Report From Bank Statement (CSV/Excel Export)',
+    title: 'CashScope - Expense Report From Bank Statement (CSV/Excel Export)',
     description: 'Turn your bank statement into a clean expense report. Export categorized data as CSV and Excel with CashScope Pro.',
     h1: 'Create an expense report from your bank statement',
-    subtitle: 'Generate a usable report for budgeting, reimbursements, or tax prep—then export with Pro.',
+    subtitle: 'Generate a usable report for budgeting, reimbursements, or tax prep. Then export with Pro.',
     bullets: ['Clean categorization', 'Clickable drilldowns for verification', 'CSV/Excel export (Pro)'],
     sections: [
       { title: 'Export options (Pro)', items: ['CSV for spreadsheets', 'Excel report with multiple sheets', 'Multi-account combined report'] },
@@ -246,7 +315,7 @@ const PAGES = [
   },
   {
     path: '/offline-bank-statement-analyzer',
-    title: 'CashScope — Offline/Local Bank Statement Analyzer',
+    title: 'CashScope - Offline/Local Bank Statement Analyzer',
     description: 'A privacy-first bank statement analyzer designed for local processing in your browser. No uploads, no bank login.',
     h1: 'Offline-friendly bank statement analyzer',
     subtitle: 'CashScope is built around local processing so sensitive financial data doesn’t need to leave your device.',
@@ -257,7 +326,7 @@ const PAGES = [
   },
   {
     path: '/multi-account-statement-analyzer',
-    title: 'CashScope — Multi Account Bank Statement Analyzer',
+    title: 'CashScope - Multi Account Bank Statement Analyzer',
     description: 'Combine multiple bank accounts to see unified spending and recurring charges. Multi-account is available in CashScope Pro.',
     h1: 'Analyze multiple bank accounts together',
     subtitle: 'Upload multiple statements and see combined insights (deduplicated where possible).',
@@ -268,7 +337,7 @@ const PAGES = [
   },
   {
     path: '/bank-statement-csv-analysis',
-    title: 'CashScope — Analyze Bank Statement CSV',
+    title: 'CashScope - Analyze Bank Statement CSV',
     description: 'Upload a bank statement CSV and get instant insights: categories, recurring payments, and monthly spend. Works locally for privacy.',
     h1: 'Analyze a bank statement CSV in minutes',
     subtitle: 'If your bank provides CSV/Excel downloads, CashScope can turn them into a clean spend report quickly.',
@@ -279,7 +348,7 @@ const PAGES = [
   },
   {
     path: '/bank-statement-export',
-    title: 'CashScope — Export Bank Statement Analysis (CSV/Excel)',
+    title: 'CashScope - Export Bank Statement Analysis (CSV/Excel)',
     description: 'Export categorized transactions and reports to CSV/Excel. Export and history are premium features in CashScope Pro.',
     h1: 'Export your bank statement analysis',
     subtitle: 'Turn insights into a file you can share, archive, or analyze further in spreadsheets.',

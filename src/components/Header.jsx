@@ -1,6 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { FaCrown, FaSignOutAlt } from 'react-icons/fa';
 
+function spaNav(e, hash) {
+  // Let browser handle new-tab / modifier clicks
+  if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+  e.preventDefault();
+  window.location.hash = hash;
+}
+
 const Header = ({ isPro, proEmail, onUpgrade, onDeactivate }) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
@@ -25,9 +32,11 @@ const Header = ({ isPro, proEmail, onUpgrade, onDeactivate }) => {
         <div className="app-title">
           <img src="/logo.svg" alt="CashScope logo" className="header-logo" />
           <span className="brand-name">CashScope</span>
-          <span className="app-subtitle">See where your money goes</span>
+          <span className="app-subtitle">See where money goes</span>
         </div>
         <div className="app-actions">
+          <a className="header-link header-link--hide-xs" href="/pricing" onClick={(e) => spaNav(e, '#pricing')}>Pricing</a>
+          <a className="header-link" href="/contact" onClick={(e) => spaNav(e, '#contact')}>Contact</a>
           {isPro ? (
             <div style={{ position: 'relative' }} ref={menuRef}>
               <div className="pro-badge" title={`Pro · ${proEmail}`} onClick={() => setMenuOpen(o => !o)} style={{ cursor: 'pointer' }}>

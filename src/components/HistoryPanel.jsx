@@ -94,7 +94,7 @@ const HistoryPanel = ({ sessions, onLoad, onDelete, onClearAll, onClose }) => (
 
       {/* Footer */}
       <div className="history-footer">
-        🔒 Saved locally in your browser — never uploaded anywhere
+        🔒 Saved locally in your browser · never uploaded anywhere
       </div>
     </div>
   </div>

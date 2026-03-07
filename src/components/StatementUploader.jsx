@@ -1,10 +1,11 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import Card from './Card';
-import { FaFileCsv, FaCheckCircle, FaExclamationCircle, FaChevronDown, FaChevronRight, FaWallet, FaArrowDown, FaArrowUp, FaExchangeAlt, FaStore, FaDownload, FaFileExcel, FaHistory } from 'react-icons/fa';
+import { FaFileCsv, FaCheckCircle, FaExclamationCircle, FaChevronDown, FaChevronRight, FaWallet, FaArrowDown, FaArrowUp, FaExchangeAlt, FaStore, FaDownload, FaFileExcel, FaHistory, FaEnvelope } from 'react-icons/fa';
 import * as XLSX from '@e965/xlsx';
 import Papa from 'papaparse';
 import { saveSession, getAllSessions, deleteSession, clearAllSessions } from '../utils/historyDB';
 import HistoryPanel from './HistoryPanel';
+import { sendEmailReport } from '../utils/emailReport';
 
 const cleanString = (val) => (typeof val === 'string' ? val.replace(/\*/g, '').trim() : val);
 const normalizeKey = (key) =>
@@ -792,7 +793,7 @@ const CategoryModal = ({ cat, onClose, multiFile, fileColorMap, fileIndexMap }) 
               {sorted.map((t, idx) => (
                 <tr key={idx}>
                   <td title={t.description}>{t.displayName}</td>
-                  <td className="date-cell">{t.date || '—'}</td>
+                  <td className="date-cell">{t.date || '-'}</td>
                   <td className="amt-debit">{fmt(t.amount)}</td>
                   <td>
                     <div className="modal-row-bar">
@@ -870,7 +871,7 @@ const RecurringSection = ({ title, icon, items, multiFile, fileColorMap, fileInd
                         <div className="detail-grid">
                           {r.details.map((d, idx) => (
                             <div key={idx} className="detail-chip">
-                              <span>{d.date || '—'}</span>
+                              <span>{d.date || '-'}</span>
                               {typeof d.amount === 'number' && <span className="amt-debit">{fmt(d.amount)}</span>}
                               {multiFile && d.srcs?.length > 0 && <SourceTag srcs={d.srcs} colorMap={fileColorMap} indexMap={fileIndexMap} />}
                             </div>
@@ -901,37 +902,62 @@ const RecurringSection = ({ title, icon, items, multiFile, fileColorMap, fileInd
 
 const HeroState = ({ onTrySample }) => (
   <div className="hero-state">
+    <p className="hero-headline">Turn your bank statement into a spending breakdown in seconds</p>
     <div className="hero-hints">
-      <span>Detects subscriptions &amp; EMIs</span>
+      <span>🔍 Subscriptions &amp; EMIs</span>
       <span className="hero-hint-sep">·</span>
-      <span>Categorises spending</span>
+      <span>📊 Category breakdown</span>
       <span className="hero-hint-sep">·</span>
-      <span>Largest payments</span>
+      <span>�️ Custom categories</span>
       <span className="hero-hint-sep">·</span>
-      <span>100% private — runs in your browser</span>
+      <span>�🏆 Top merchants</span>
+      <span className="hero-hint-sep">·</span>
+      <span>🔒 100% private, runs locally</span>
     </div>
     {typeof onTrySample === 'function' && (
       <div className="hero-actions">
-        <button className="hero-sample-btn" onClick={onTrySample}>
-          Try with sample data
+        <button className="hero-sample-btn hero-sample-btn--primary" onClick={onTrySample}>
+          ▶ Try with sample data
         </button>
+        <span className="hero-or">or drop your CSV/XLSX above</span>
       </div>
     )}
   </div>
 );
 
-const Insights = ({ recurring, payments, userStats, hasData, loadedFiles, onExportCSV, onExportExcel, isPro, onUpgrade, monthlyRecurring, availableMonths, dateFilter, onDateFilterChange, onCustomKwChange }) => {
+const Insights = ({ recurring, payments, userStats, hasData, loadedFiles, onExportCSV, onExportExcel, onEmailReport, isPro, onUpgrade, monthlyRecurring, availableMonths, dateFilter, onDateFilterChange, onCustomKwChange }) => {
   const [openIndex, setOpenIndex] = useState(null);
   const [openSubIndex, setOpenSubIndex] = useState(null);
   const [openPaymentIndex, setOpenPaymentIndex] = useState(null);
   const [openPayeeIndex, setOpenPayeeIndex] = useState(null);
-  const [categoryModal, setCategoryModal] = useState(null); // holds the selected category object
-  const [clickedMonth, setClickedMonth] = useState(null); // holds the selected month data for modal
-  const [catRulesOpen, setCatRulesOpen] = useState(false); // category rules/tags modal
-  const [catAddState, setCatAddState]   = useState(null);  // { catName, value } — inline add input
+  const [categoryModal, setCategoryModal] = useState(null);
+  const [clickedMonth, setClickedMonth] = useState(null);
+  const [catRulesOpen, setCatRulesOpen] = useState(false);
+  const [catAddState, setCatAddState]   = useState(null);
   const [localCustomKw, setLocalCustomKw] = useState(() => {
     try { return JSON.parse(localStorage.getItem('acc_cat_custom') || '{}'); } catch { return {}; }
   });
+
+  // Email report state
+  const [emailOpen,   setEmailOpen]   = useState(false);
+  const [emailAddr,   setEmailAddr]   = useState('');
+  const [emailStatus, setEmailStatus] = useState('idle'); // idle | sending | sent | error
+  const [emailError,  setEmailError]  = useState('');
+  const emailInputRef = useRef(null);
+
+  const handleEmailReport = async () => {
+    if (!emailAddr.includes('@')) return;
+    setEmailStatus('sending');
+    setEmailError('');
+    try {
+      await onEmailReport(emailAddr.trim());
+      setEmailStatus('sent');
+      setTimeout(() => { setEmailOpen(false); setEmailStatus('idle'); setEmailAddr(''); }, 3500);
+    } catch (err) {
+      setEmailStatus('error');
+      setEmailError(err.message || 'Failed to send');
+    }
+  };
   if (!hasData) return null;
 
   const multiFile    = loadedFiles.length > 1;
@@ -998,14 +1024,51 @@ const Insights = ({ recurring, payments, userStats, hasData, loadedFiles, onExpo
 
       {/* Export toolbar — Pro only */}
       {isPro ? (
-        <div className="export-bar">
-          <span className="export-bar-label"><FaDownload size={11}/> Export</span>
-          <button className="export-btn export-btn-csv" onClick={onExportCSV} title="Download all transactions as CSV">
-            <FaFileCsv size={13}/> CSV
-          </button>
-          <button className="export-btn export-btn-excel" onClick={onExportExcel} title="Download full report as Excel (4 sheets)">
-            <FaFileExcel size={13}/> Excel Report
-          </button>
+        <div className="export-bar-wrap">
+          <div className="export-bar">
+            <span className="export-bar-label"><FaDownload size={11}/> Export</span>
+            <button className="export-btn export-btn-csv" onClick={onExportCSV} title="Download all transactions as CSV">
+              <FaFileCsv size={13}/> CSV
+            </button>
+            <button className="export-btn export-btn-excel" onClick={onExportExcel} title="Download full report as Excel (4 sheets)">
+              <FaFileExcel size={13}/> Excel Report
+            </button>
+            <button
+              className={`export-btn export-btn-email${emailOpen ? ' active' : ''}`}
+              onClick={() => { setEmailOpen(o => !o); setEmailStatus('idle'); setEmailError(''); setTimeout(() => emailInputRef.current?.focus(), 50); }}
+              title="Email the CSV report to yourself"
+            >
+              <FaEnvelope size={13}/> Email Report
+            </button>
+          </div>
+          {emailOpen && (
+            <div className="email-report-form">
+              <input
+                ref={emailInputRef}
+                className="email-report-input"
+                type="email"
+                placeholder="your@email.com"
+                value={emailAddr}
+                onChange={e => setEmailAddr(e.target.value)}
+                disabled={emailStatus === 'sending'}
+                onKeyDown={e => e.key === 'Enter' && handleEmailReport()}
+              />
+              <button
+                className="email-report-send"
+                onClick={handleEmailReport}
+                disabled={emailStatus === 'sending' || !emailAddr.includes('@')}
+              >
+                {emailStatus === 'sending' ? 'Sending…' : 'Send'}
+              </button>
+              <button
+                className="email-report-cancel"
+                onClick={() => { setEmailOpen(false); setEmailStatus('idle'); setEmailError(''); }}
+                title="Cancel"
+              >×</button>
+              {emailStatus === 'sent'  && <span className="email-report-ok">✓ Sent! Check your inbox.</span>}
+              {emailStatus === 'error' && <span className="email-report-err">⚠️ {emailError}</span>}
+            </div>
+          )}
         </div>
       ) : (
         <div className="pro-upsell-bar" onClick={onUpgrade}>
@@ -1095,7 +1158,7 @@ const Insights = ({ recurring, payments, userStats, hasData, loadedFiles, onExpo
                 <button className="modal-close" onClick={() => setCatRulesOpen(false)}>×</button>
               </div>
               <div className="modal-body cat-rules-body">
-                <p className="cat-rules-intro">Built-in keywords (grey) match transactions automatically. Add your own keywords (coloured) to override categorization — they take priority.</p>
+                <p className="cat-rules-intro">Built-in keywords (grey) match transactions automatically. Add your own keywords (coloured) to override categorization. They take priority.</p>
                 <div className="cat-rules-grid">
                   {CATEGORY_RULES_DISPLAY.map(cat => {
                     const userKws = localCustomKw[cat.name] || [];
@@ -1236,7 +1299,7 @@ const Insights = ({ recurring, payments, userStats, hasData, loadedFiles, onExpo
             <div className="modal-header" style={{ borderBottom: '3px solid #7c3aed' }}>
               <span className="modal-title">
                 <span className="modal-emoji">📅</span>
-                {clickedMonth.label} — Recurring Spend
+                {clickedMonth.label} - Recurring Spend
                 <span className="modal-count">{clickedMonth.txs.length} transactions</span>
               </span>
               <button className="modal-close" onClick={() => setClickedMonth(null)} aria-label="Close">&times;</button>
@@ -1337,7 +1400,7 @@ const Insights = ({ recurring, payments, userStats, hasData, loadedFiles, onExpo
                           <tbody>
                             {[...m.transactions].sort((a, b) => b.amount - a.amount).map((t, idx) => (
                               <tr key={idx}>
-                                <td className="date-cell">{t.date || '—'}</td>
+                                <td className="date-cell">{t.date || '-'}</td>
                                 <td className="amt-debit">{fmt(t.amount)}{multiFile && t.srcs?.length > 0 && <SourceTag srcs={t.srcs} colorMap={fileColorMap} indexMap={fileIndexMap} />}</td>
                               </tr>
                             ))}
@@ -1847,6 +1910,29 @@ const StatementUploader = ({ isPro = false, onUpgrade }) => {
       `transactions-${new Date().toISOString().slice(0,10)}.csv`);
   }
 
+  async function emailReport(targetEmail) {
+    const rows = buildTxRows();
+    const csv  = '\uFEFF' + Papa.unparse(rows);
+    // Encode UTF-8 string to base64 safely
+    const bytes   = new TextEncoder().encode(csv);
+    const binary  = Array.from(bytes).reduce((s, b) => s + String.fromCharCode(b), '');
+    const csvBase64 = btoa(binary);
+    const date = new Date().toISOString().slice(0, 10);
+    const summary = {
+      dateRange:      userStats.dateRange ? `${userStats.dateRange.from} - ${userStats.dateRange.to}` : '',
+      totalSpent:     userStats.totalSpent     || 0,
+      totalReceived:  userStats.totalReceived  || 0,
+      topCategories:  (userStats.categorySpend || []).slice(0, 6).map(c => ({ name: c.name, emoji: c.emoji, total: c.total })),
+      recurringCount: recurring.length,
+    };
+    await sendEmailReport({
+      email:     targetEmail,
+      csvBase64,
+      filename:  `expense-report-${date}.csv`,
+      summary,
+    });
+  }
+
   function exportExcel() {
     const date = new Date().toISOString().slice(0, 10);
 
@@ -1940,8 +2026,8 @@ const StatementUploader = ({ isPro = false, onUpgrade }) => {
     <>
     <Card>
       <h2 className="upload-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <img src="/logo.svg" alt="" style={{ width: 22, height: 22, borderRadius: 5 }} /> Upload to CashScope
-        <span className="badge-muted">CSV or Excel • multiple accounts → combined dashboard</span>
+        <img src="/logo.svg" alt="" style={{ width: 22, height: 22, borderRadius: 5 }} /> Bank Statement Analyzer
+        <span className="badge-muted">CSV or Excel · custom categories · instant · private</span>
       </h2>
 
       <div className="trust-banner">
@@ -2032,7 +2118,7 @@ const StatementUploader = ({ isPro = false, onUpgrade }) => {
         </div>
       )}
       {!hasData && <HeroState onTrySample={loadSampleData} />}
-      <Insights recurring={recurring} payments={payments} userStats={userStats} hasData={hasData} loadedFiles={loadedFiles} onExportCSV={exportCSV} onExportExcel={exportExcel} isPro={isPro} onUpgrade={onUpgrade} monthlyRecurring={monthlyRecurring} availableMonths={availableMonths} dateFilter={dateFilter} onDateFilterChange={setDateFilter} onCustomKwChange={handleCustomKwChange} />
+      <Insights recurring={recurring} payments={payments} userStats={userStats} hasData={hasData} loadedFiles={loadedFiles} onExportCSV={exportCSV} onExportExcel={exportExcel} onEmailReport={emailReport} isPro={isPro} onUpgrade={onUpgrade} monthlyRecurring={monthlyRecurring} availableMonths={availableMonths} dateFilter={dateFilter} onDateFilterChange={setDateFilter} onCustomKwChange={handleCustomKwChange} />
     </Card>
 
     {historyOpen && (

@@ -50,6 +50,8 @@ if (!razorpayConfigured) console.warn('⚠️  Razorpay keys not configured — 
 const resendConfigured = !!(process.env.RESEND_API_KEY && !process.env.RESEND_API_KEY.includes('REPLACE'));
 const resend = resendConfigured ? new Resend(process.env.RESEND_API_KEY) : null;
 
+const SUPPORT_EMAIL = process.env.SUPPORT_EMAIL || process.env.EMAIL_FROM || 'support@cashscope.app';
+
 if (!resendConfigured) console.warn('⚠️  Resend API key not configured — license keys will NOT be emailed');
 else console.log('📧 Resend mailer ready');
 
@@ -98,7 +100,7 @@ async function sendLicenseEmail(email, key, orderId = '') {
         <table style="width:100%;border-collapse:collapse;margin-top:20px;font-size:0.82rem;color:#374151">
           <tr style="border-top:1px solid #e5e7eb">
             <td style="padding:8px 4px;color:#9ca3af">Order ID</td>
-            <td style="padding:8px 4px;font-weight:600">${orderId || '—'}</td>
+            <td style="padding:8px 4px;font-weight:600">${orderId || 'N/A'}</td>
           </tr>
           <tr style="border-top:1px solid #e5e7eb">
             <td style="padding:8px 4px;color:#9ca3af">Issued to</td>
@@ -115,7 +117,7 @@ async function sendLicenseEmail(email, key, orderId = '') {
         </table>
 
         <p style="font-size:0.82rem;color:#9ca3af;margin-top:20px">
-          Keep this key safe — it works on any browser or device.
+          Keep this key safe. It works on any browser or device.
           Lost it? Reply to this email quoting your Order ID and we'll resend it.
         </p>
         <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0"/>
@@ -124,6 +126,84 @@ async function sendLicenseEmail(email, key, orderId = '') {
     `,
   });
   console.log(`✅ License email sent via Resend to ${email}`);
+}
+
+async function sendContactEmail({ name = '', email = '', subject = '', message = '' }) {
+  const cleanedEmail = String(email || '').trim();
+  const cleanedName  = String(name || '').trim();
+  const cleanedSubj  = String(subject || '').trim();
+  const cleanedMsg   = String(message || '').trim();
+
+  if (!resendConfigured) {
+    console.log('📧 Contact email skipped (Resend not configured)', {
+      from: cleanedEmail,
+      name: cleanedName,
+      subject: cleanedSubj,
+      message: cleanedMsg,
+    });
+    return { delivered: false };
+  }
+
+  const appUrl = process.env.SITE_URL || process.env.FRONTEND_URL || 'https://cashscope.app';
+  const from   = process.env.EMAIL_FROM || 'CashScope <noreply@cashscope.app>';
+  const to     = SUPPORT_EMAIL;
+
+  const finalSubject = cleanedSubj
+    ? `[CashScope] ${cleanedSubj}`
+    : '[CashScope] Contact form message';
+
+  const replyTo = cleanedEmail || undefined;
+
+  await resend.emails.send({
+    from,
+    to,
+    subject: finalSubject,
+    replyTo,
+    html: `
+      <div style="font-family:sans-serif;max-width:640px;margin:0 auto;padding:24px;color:#1b2230">
+        <h2 style="margin:0 0 12px">New Contact Message</h2>
+        <table style="width:100%;border-collapse:collapse;margin:10px 0 18px;font-size:0.92rem;color:#374151">
+          <tr style="border-top:1px solid #e5e7eb">
+            <td style="padding:8px 6px;color:#6b7280;width:120px">Name</td>
+            <td style="padding:8px 6px;font-weight:600">${cleanedName || 'N/A'}</td>
+          </tr>
+          <tr style="border-top:1px solid #e5e7eb">
+            <td style="padding:8px 6px;color:#6b7280">Email</td>
+            <td style="padding:8px 6px;font-weight:600">${cleanedEmail || 'N/A'}</td>
+          </tr>
+          <tr style="border-top:1px solid #e5e7eb">
+            <td style="padding:8px 6px;color:#6b7280">Site</td>
+            <td style="padding:8px 6px">${appUrl}</td>
+          </tr>
+        </table>
+        <div style="white-space:pre-wrap;background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px;padding:14px 16px;line-height:1.55">
+${cleanedMsg || '(empty)'}
+        </div>
+      </div>
+    `,
+  });
+
+  // Lightweight acknowledgement to the user (optional but helpful)
+  if (cleanedEmail) {
+    resend.emails.send({
+      from,
+      to: cleanedEmail,
+      subject: 'We received your message (CashScope)',
+      html: `
+        <div style="font-family:sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#1b2230">
+          <h2 style="margin:0 0 10px">Thanks for reaching out</h2>
+          <p style="color:#374151;line-height:1.6;margin:0 0 12px">
+            We’ve received your message and will get back to you as soon as we can.
+          </p>
+          <p style="color:#6b7280;font-size:0.9rem;line-height:1.6;margin:0">
+            If you need to follow up, just reply to this email.
+          </p>
+        </div>
+      `,
+    }).catch(() => {});
+  }
+
+  return { delivered: true };
 }
 
 // ── Routes ───────────────────────────────────────────────────────────────
@@ -249,6 +329,122 @@ app.post('/api/verify-payment', async (req, res) => {
   } catch (err) {
     console.error('verify-payment error:', err);
     res.status(500).json({ error: 'Verification failed' });
+  }
+});
+
+// 5. Contact form — sends an email to support
+app.post('/api/contact', async (req, res) => {
+  try {
+    const { name, email, subject, message, website } = req.body || {};
+
+    // Honeypot anti-spam: if filled, pretend success
+    if (website) return res.json({ ok: true });
+
+    const cleanedEmail = String(email || '').trim();
+    const cleanedMsg   = String(message || '').trim();
+    const cleanedSubj  = String(subject || '').trim();
+    const cleanedName  = String(name || '').trim();
+
+    if (!cleanedEmail || !cleanedEmail.includes('@'))
+      return res.status(400).json({ ok: false, error: 'Valid email required' });
+    if (!cleanedMsg)
+      return res.status(400).json({ ok: false, error: 'Message required' });
+    if (cleanedMsg.length > 8000)
+      return res.status(400).json({ ok: false, error: 'Message too long' });
+    if (cleanedSubj.length > 140)
+      return res.status(400).json({ ok: false, error: 'Subject too long' });
+
+    await sendContactEmail({
+      name: cleanedName,
+      email: cleanedEmail,
+      subject: cleanedSubj,
+      message: cleanedMsg,
+    });
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('contact error:', err);
+    res.status(500).json({ ok: false, error: 'Could not send message' });
+  }
+});
+
+// 6. Email report — send CSV as email attachment (Pro feature)
+app.post('/api/email-report', async (req, res) => {
+  try {
+    const { email, csvBase64, filename, summary } = req.body || {};
+
+    const cleanEmail = String(email || '').trim();
+    if (!cleanEmail || !cleanEmail.includes('@'))
+      return res.status(400).json({ ok: false, error: 'Valid email required' });
+    if (!csvBase64 || typeof csvBase64 !== 'string')
+      return res.status(400).json({ ok: false, error: 'No report data provided' });
+    // ~750 KB base64 ≈ 500 KB CSV — enough for large statements
+    if (csvBase64.length > 800_000)
+      return res.status(400).json({ ok: false, error: 'Report too large to email (try fewer rows)' });
+    if (!resendConfigured)
+      return res.status(503).json({ ok: false, error: 'Email delivery is not configured on the server' });
+
+    const appUrl       = process.env.SITE_URL || process.env.FRONTEND_URL || 'https://cashscope.app';
+    const from         = process.env.EMAIL_FROM || 'CashScope <noreply@cashscope.app>';
+    const cleanFilename = String(filename || 'expense-report.csv').replace(/[^a-z0-9._-]/gi, '-');
+    const s            = summary || {};
+
+    const fmt = (n) => '\u20b9' + Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 });
+
+    const catRows = (s.topCategories || []).slice(0, 6).map(c =>
+      `<tr style="border-bottom:1px solid #f3f4f6">
+        <td style="padding:6px 10px">${c.emoji || ''} ${c.name || ''}</td>
+        <td style="padding:6px 10px;text-align:right;font-weight:600;color:#1b2230">${fmt(c.total)}</td>
+      </tr>`
+    ).join('');
+
+    await resend.emails.send({
+      from,
+      to:          cleanEmail,
+      subject:     `Your CashScope Expense Report${s.dateRange ? ' \u00b7 ' + s.dateRange : ''}`,
+      attachments: [{ filename: cleanFilename, content: Buffer.from(csvBase64, 'base64') }],
+      html: `
+        <div style="font-family:sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#1b2230">
+          <img src="${appUrl}/logo.svg" width="36" style="border-radius:8px;margin-bottom:14px" />
+          <h2 style="margin:0 0 6px">Your Expense Report</h2>
+          <p style="color:#6b7280;font-size:0.9rem;margin:0 0 20px">
+            Generated by <a href="${appUrl}" style="color:#4e54c8">CashScope</a>
+            ${s.dateRange ? '&nbsp;&middot;&nbsp;' + s.dateRange : ''}
+          </p>
+
+          <table style="width:100%;border-collapse:collapse;background:#f8fafc;border-radius:10px;overflow:hidden;font-size:0.88rem;margin-bottom:22px">
+            <tr style="border-bottom:1px solid #e5e7eb">
+              <td style="padding:9px 12px;color:#6b7280">Total debited</td>
+              <td style="padding:9px 12px;font-weight:700;color:#e53935;text-align:right">${fmt(s.totalSpent)}</td>
+            </tr>
+            <tr style="border-bottom:1px solid #e5e7eb">
+              <td style="padding:9px 12px;color:#6b7280">Total credited</td>
+              <td style="padding:9px 12px;font-weight:700;color:#2e7d32;text-align:right">${fmt(s.totalReceived)}</td>
+            </tr>
+            ${s.recurringCount ? `<tr><td style="padding:9px 12px;color:#6b7280">Recurring / subscriptions</td><td style="padding:9px 12px;font-weight:600;text-align:right">${s.recurringCount} merchants</td></tr>` : ''}
+          </table>
+
+          ${catRows ? `
+          <p style="font-size:0.82rem;font-weight:700;color:#374151;margin:0 0 6px">Top spending categories</p>
+          <table style="width:100%;border-collapse:collapse;font-size:0.85rem;margin-bottom:22px;background:#fff;border-radius:10px;overflow:hidden">
+            ${catRows}
+          </table>` : ''}
+
+          <p style="font-size:0.78rem;color:#9ca3af">
+            The full transaction list is in the attached CSV file.<br/>
+            Your data is processed locally by CashScope and is not stored on our servers.
+          </p>
+          <hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0"/>
+          <p style="font-size:0.76rem;color:#9ca3af">CashScope &middot; <a href="${appUrl}" style="color:#9ca3af">${appUrl}</a></p>
+        </div>
+      `,
+    });
+
+    console.log(`📧 Email report sent to ${cleanEmail}`);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('email-report error:', err);
+    res.status(500).json({ ok: false, error: 'Failed to send report' });
   }
 });
 
